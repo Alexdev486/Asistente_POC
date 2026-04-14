@@ -1,0 +1,39 @@
+[
+  {
+    "faq_id": 1,
+    "model": "AK550",
+    "category": "Paradas de motor",
+    "question": "Por que puede pararse la moto en marcha de forma intermitente?",
+    "answer": "Las causas mas probables en esta POC son: sensor de inclinacion defectuoso, bomba de gasolina defectuosa, reglaje de valvulas pisado, agua en el deposito o mal contacto en pipa de bujia.",
+    "usage_count": 0,
+    "active": true
+  },
+  {
+    "faq_id": 2,
+    "model": "AK550",
+    "category": "Combustible",
+    "question": "Que significa que no se escuche la bomba de gasolina al dar contacto?",
+    "answer": "En esta POC se interpreta como una senal compatible con fallo de bomba de gasolina o falta de alimentacion electrica al sistema de combustible.",
+    "usage_count": 0,
+    "active": true
+  },
+  {
+    "faq_id": 3,
+    "model": null,
+    "category": "General",
+    "question": "Que significa el testigo CELP encendido?",
+    "answer": "En esta POC, el testigo CELP indica una averia relacionada con la gestion electronica del motor o el sistema de inyeccion y debe orientar la diagnosis hacia la rama especifica de CELP.",
+    "usage_count": 0,
+    "active": true
+  },
+  {
+    "faq_id": 4,
+    "model": "AK550",
+    "category": "Mantenimiento",
+    "question": "Que puede indicar que falle en caliente y vuelva a arrancar en frio?",
+    "answer": "En esta POC, ese patron es compatible con reglaje de valvulas pisado y perdida de compresion en caliente.",
+    "usage_count": 0,
+    "active": true
+  }
+]
+

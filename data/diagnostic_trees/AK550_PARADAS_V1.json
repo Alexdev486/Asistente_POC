@@ -1,0 +1,65 @@
+{
+  "tree_id": "AK550_PARADAS_V1",
+  "model": "AK550",
+  "symptom": "Paradas de motor",
+  "version": 1,
+  "active": true,
+  "tree_json": {
+    "start_node": "n1",
+    "nodes": {
+      "n1": {
+        "type": "question",
+        "text": "Cuando se para, arranca sin quitar contacto?",
+        "answers": {
+          "si": "n2",
+          "no": "n3"
+        }
+      },
+      "n2": {
+        "type": "diagnosis",
+        "result": "Mal contacto en pipa de bujia"
+      },
+      "n3": {
+        "type": "question",
+        "text": "Quita contacto y vuelve a intentar. Arranca?",
+        "answers": {
+          "si": "n4",
+          "no": "n5"
+        }
+      },
+      "n4": {
+        "type": "diagnosis",
+        "result": "Sensor de inclinacion defectuoso"
+      },
+      "n5": {
+        "type": "question",
+        "text": "Se escucha la bomba de gasolina?",
+        "answers": {
+          "si": "n6",
+          "no": "n7"
+        }
+      },
+      "n6": {
+        "type": "question",
+        "text": "Arranca despues de enfriar?",
+        "answers": {
+          "si": "n8",
+          "no": "n9"
+        }
+      },
+      "n7": {
+        "type": "diagnosis",
+        "result": "Bomba de gasolina defectuosa"
+      },
+      "n8": {
+        "type": "diagnosis",
+        "result": "Reglaje de valvulas pisado"
+      },
+      "n9": {
+        "type": "diagnosis",
+        "result": "Agua en el deposito"
+      }
+    }
+  }
+}
+

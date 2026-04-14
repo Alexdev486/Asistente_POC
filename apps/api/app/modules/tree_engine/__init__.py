@@ -1,0 +1,2 @@
+"""Diagnostic tree module."""
+

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asistente-poc/contracts/diagnostic_output.schema.json",
+  "title": "DiagnosticOutput",
+  "type": "object",
+  "required": [
+    "primary_hypothesis",
+    "alternatives",
+    "next_check",
+    "short_explanation",
+    "confidence"
+  ],
+  "properties": {
+    "primary_hypothesis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "alternatives": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxItems": 2
+    },
+    "next_check": {
+      "type": "string",
+      "minLength": 1
+    },
+    "short_explanation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "additionalProperties": false
+}
+

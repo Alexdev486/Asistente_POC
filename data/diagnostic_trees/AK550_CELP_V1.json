@@ -1,0 +1,41 @@
+{
+  "tree_id": "AK550_CELP_V1",
+  "model": "AK550",
+  "symptom": "Testigo CELP encendido",
+  "version": 1,
+  "active": true,
+  "tree_json": {
+    "start_node": "c1",
+    "nodes": {
+      "c1": {
+        "type": "question",
+        "text": "La moto arranca y funciona, aunque con el testigo CELP encendido?",
+        "answers": {
+          "si": "c2",
+          "no": "c3"
+        }
+      },
+      "c2": {
+        "type": "diagnosis",
+        "result": "Fallo electronico no bloqueante; revisar sensor TPS, sensor de temperatura o lectura de codigos"
+      },
+      "c3": {
+        "type": "question",
+        "text": "Ademas del testigo CELP, hay dificultad de arranque o parada del motor?",
+        "answers": {
+          "si": "c4",
+          "no": "c5"
+        }
+      },
+      "c4": {
+        "type": "diagnosis",
+        "result": "Posible fallo de alimentacion o gestion electronica del combustible"
+      },
+      "c5": {
+        "type": "diagnosis",
+        "result": "Revisar lectura de codigos y comprobaciones electricas basicas"
+      }
+    }
+  }
+}
+

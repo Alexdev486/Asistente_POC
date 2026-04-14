@@ -1,0 +1,43 @@
+[
+  {
+    "case_id": "CASE-001",
+    "model": "AK550",
+    "symptom_category": "Paradas de motor",
+    "case_text": "La moto se para en marcha al pasar por baches y vuelve a arrancar despues de quitar y dar contacto.",
+    "final_diagnosis": "Sensor de inclinacion defectuoso",
+    "base_confidence": 0.85
+  },
+  {
+    "case_id": "CASE-002",
+    "model": "AK550",
+    "symptom_category": "Paradas de motor",
+    "case_text": "La moto se para y al volver a dar contacto no se escucha la bomba de gasolina.",
+    "final_diagnosis": "Bomba de gasolina defectuosa",
+    "base_confidence": 0.9
+  },
+  {
+    "case_id": "CASE-003",
+    "model": "AK550",
+    "symptom_category": "Paradas de motor",
+    "case_text": "La moto se para en caliente y despues de enfriar vuelve a arrancar con normalidad.",
+    "final_diagnosis": "Reglaje de valvulas pisado",
+    "base_confidence": 0.88
+  },
+  {
+    "case_id": "CASE-004",
+    "model": "AK550",
+    "symptom_category": "Paradas de motor",
+    "case_text": "Tras repostar, la moto presenta paradas intermitentes y funcionamiento irregular.",
+    "final_diagnosis": "Agua en el deposito",
+    "base_confidence": 0.75
+  },
+  {
+    "case_id": "CASE-005",
+    "model": "AK550",
+    "symptom_category": "Paradas de motor",
+    "case_text": "La moto se para de forma intermitente pero a veces rearranca sin necesidad de quitar contacto.",
+    "final_diagnosis": "Mal contacto en pipa de bujia",
+    "base_confidence": 0.7
+  }
+]
+

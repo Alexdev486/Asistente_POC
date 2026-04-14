@@ -1,0 +1,35 @@
+[
+  {
+    "vin": "AK550-POC-0001",
+    "model": "AK550",
+    "family": "Scooter GT",
+    "displacement_cc": 550,
+    "market": "ES",
+    "model_year": 2022
+  },
+  {
+    "vin": "AK550-POC-0002",
+    "model": "AK550",
+    "family": "Scooter GT",
+    "displacement_cc": 550,
+    "market": "ES",
+    "model_year": 2023
+  },
+  {
+    "vin": "AK550-POC-0003",
+    "model": "AK550",
+    "family": "Scooter GT",
+    "displacement_cc": 550,
+    "market": "ES",
+    "model_year": 2024
+  },
+  {
+    "vin": "XCITING-POC-0001",
+    "model": "Xciting 400",
+    "family": "Scooter GT",
+    "displacement_cc": 400,
+    "market": "ES",
+    "model_year": 2021
+  }
+]
+
