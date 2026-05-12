@@ -430,6 +430,7 @@ Copiar `.env.example` a `.env` y completar:
 make db-up
 make db-migrate
 make db-seed
+make db-ingest-chunks
 ```
 
 ### 3) Backend
@@ -480,7 +481,7 @@ make web-run
 | TREE-01 | F3 | Arbol | Ejecucion real desde `diagnostic_trees` | ✅ Hecho | Diagnostico guiado real | BE-03, ORCH-02 |
 | FAQ-01 | F3 | FAQ | Matcher final por modelo + fallback general | ✅ Hecho | FAQ operativa final | BE-03, ORCH-02 |
 | OTH-01 | F3 | Otros | Parsing libre (reglas + LLM) con Groq/OpenRouter | ✅ Hecho | Tags/categoria robusta en demo | ORCH-02 |
-| OTH-02 | F3 | Otros | Ingestion de `knowledge_chunks` | ⬜ Pendiente | Corpus vectorial inicial | BE-03 |
+| OTH-02 | F3 | Otros | Ingestion de `knowledge_chunks` | ✅ Hecho | Corpus vectorial inicial | BE-03 |
 | OTH-03 | F3 | Otros | Worker de `embedding_jobs` | ⬜ Pendiente | Embeddings operativos | OTH-02 |
 | OTH-04 | F3 | Otros | Retrieval `hybrid_search` + top-3 definitivo | ⬜ Pendiente | Modulo Otros completo | OTH-03 |
 | API-01 | F4 | API | Endpoints conectados al orquestador completo + BD real | ⬜ Pendiente | API E2E final | ORCH-02, BE-04 |
@@ -503,7 +504,7 @@ make web-run
 
 ### Siguiente tarea concreta
 
-**OTH-02**: ingestion de `knowledge_chunks` para inicializar corpus vectorial.
+**OTH-03**: worker de `embedding_jobs` para procesar embeddings pendientes.
 
 ---
 
@@ -523,7 +524,7 @@ La POC se considera cerrada cuando:
 ## Instrucciones para la siguiente sesion
 
 1. Leer este `README.md` completo.
-2. Continuar por **OTH-02**.
+2. Continuar por **OTH-03**.
 3. Mantener foco en:
    - estado en BD,
    - trazabilidad (`messages`, `decision_logs`),
