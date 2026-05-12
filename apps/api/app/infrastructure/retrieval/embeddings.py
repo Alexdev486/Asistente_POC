@@ -1,4 +1,5 @@
 from app.infrastructure.llm.gateway import LLMGateway
+import hashlib
 
 
 class EmbeddingService:
@@ -11,6 +12,11 @@ class EmbeddingService:
         pass
 
     def embed(self, text: str) -> list[float]:
-        # Placeholder determinista para poder avanzar con estructura y pruebas.
-        return [float(len(text) % 10)] * 8
-
+        # Embedding determinista de 1024 dimensiones para pipeline end-to-end.
+        # Se reemplazara por proveedor real en la fase de hardening.
+        digest = hashlib.sha256(text.encode("utf-8")).digest()
+        values: list[float] = []
+        for idx in range(1024):
+            byte_val = digest[idx % len(digest)]
+            values.append(byte_val / 255.0)
+        return values
