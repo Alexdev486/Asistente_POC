@@ -1,7 +1,22 @@
-from dataclasses import dataclass
+from typing import Any
 from uuid import UUID, uuid4
 
-from app.application.orchestrator.langgraph_flow import ConversationRouter, ConversationSnapshot
+from app.application.orchestrator.langgraph_flow import ConversationGraph, ConversationSnapshot
+from app.infrastructure.db.repositories import (
+    DecisionLogRepository,
+    FeedbackRepository,
+    KnowledgeRepository,
+    MessageRepository,
+    SessionRepository,
+)
+from app.infrastructure.llm.gateway import LLMGateway
+from app.infrastructure.llm.providers.groq import GroqProvider
+from app.infrastructure.llm.providers.openrouter import OpenRouterProvider
+from app.modules.faq_matcher.service import FAQMatcherService
+from app.modules.free_text_parser.service import FreeTextParserService
+from app.modules.historical_retrieval.service import HistoricalRetrievalService
+from app.modules.hybrid_ranking.service import HybridRankingService
+from app.modules.tree_engine.service import DiagnosticTreeEngine
 from app.modules.vin_lookup.service import VINLookupService
 from app.schemas.requests import SessionFeedbackRequest, SessionMessageRequest, StartSessionRequest
 from app.schemas.responses import (
@@ -13,135 +28,186 @@ from app.schemas.responses import (
 )
 
 
-@dataclass
-class SessionRecord:
-    session_id: UUID
-    status: str
-    entry_point: str | None
-    steps: int
-    state: SessionStateResponse
-    state_json: dict
-
-
 class SessionUseCases:
-    """
-    Bootstrapping in-memory use case.
-    In fase siguiente se reemplaza por repositorios SQL.
-    """
-
-    def __init__(self) -> None:
-        self._sessions: dict[UUID, SessionRecord] = {}
-        self._feedback: dict[UUID, SessionFeedbackRequest] = {}
-        self._router = ConversationRouter()
-        self._vin_lookup = VINLookupService()
+    def __init__(
+        self,
+        session_repository: SessionRepository,
+        feedback_repository: FeedbackRepository,
+        decision_log_repository: DecisionLogRepository,
+        knowledge_repository: KnowledgeRepository,
+        message_repository: MessageRepository,
+    ) -> None:
+        self._session_repository = session_repository
+        self._feedback_repository = feedback_repository
+        self._decision_log_repository = decision_log_repository
+        self._knowledge_repository = knowledge_repository
+        self._message_repository = message_repository
+        self._vin_lookup = VINLookupService(vehicle_resolver=self._knowledge_repository.get_vehicle_by_vin)
+        self._faq_matcher = FAQMatcherService()
+        self._llm_gateway = LLMGateway(primary=GroqProvider(), fallback=OpenRouterProvider())
+        self._free_text_parser = FreeTextParserService(llm_gateway=self._llm_gateway)
+        self._historical_retrieval = HistoricalRetrievalService()
+        self._hybrid_ranking = HybridRankingService()
+        self._tree_engine = DiagnosticTreeEngine()
+        self._graph = ConversationGraph(
+            resolve_vin=self._vin_lookup.resolve,
+            list_active_faqs=self._knowledge_repository.list_active_faqs,
+            list_active_tree_symptoms=self._knowledge_repository.list_active_tree_symptoms,
+            get_active_tree_by_symptom=self._knowledge_repository.get_active_tree_by_symptom,
+            list_historical_cases=self._knowledge_repository.list_historical_cases,
+            parse_free_text=self._free_text_parser.parse,
+            faq_match=self._faq_matcher.match,
+            historical_retrieve=self._historical_retrieval.retrieve,
+            rank_hypotheses=self._hybrid_ranking.rank,
+            tree_engine=self._tree_engine,
+        )
 
     def start_session(self, _: StartSessionRequest) -> StartSessionResponse:
         session_id = uuid4()
-        self._sessions[session_id] = SessionRecord(
+        self._session_repository.create_session(
             session_id=session_id,
-            status="active",
-            entry_point=None,
-            steps=0,
-            state=SessionStateResponse(),
-            state_json={"facts": {}, "active_hypotheses": [], "asked_questions": []},
+            state_json={
+                "facts": {},
+                "active_hypotheses": [],
+                "asked_questions": [],
+                "orchestration": {"last_route": "vin_lookup", "entry_point": None, "last_confidence": 0.0},
+            },
         )
-        return StartSessionResponse(
+        response = StartSessionResponse(
             session_id=session_id,
             message=(
                 "Hola. Indicame el bastidor para identificar el vehiculo y ayudarte con "
                 "el diagnostico."
             ),
         )
+        self._message_repository.save_message(session_id, "assistant", response.message)
+        return response
 
     def process_message(self, payload: SessionMessageRequest) -> SessionMessageResponse:
-        record = self._sessions.get(payload.session_id)
-        if record is None:
+        persisted = self._session_repository.get_session(payload.session_id)
+        if persisted is None:
             raise KeyError(f"Sesion no encontrada: {payload.session_id}")
 
-        record.steps += 1
+        steps = persisted.steps + 1
         user_message = payload.message.strip()
+        self._message_repository.save_message(payload.session_id, "user", user_message)
 
-        if not record.state.vin:
-            vehicle = self._vin_lookup.resolve(user_message)
-            if not vehicle:
-                return SessionMessageResponse(
-                    session_id=payload.session_id,
-                    message="No he podido identificar ese bastidor. Intenta de nuevo.",
-                    state=record.state,
-                )
-            record.state.vin = vehicle.vin
-            record.state.model = vehicle.model
-            return SessionMessageResponse(
-                session_id=payload.session_id,
-                message=(
-                    f"He identificado el vehiculo como {vehicle.model} ({vehicle.model_year}). "
-                    "Selecciona una opcion: Sintomas frecuentes, Consultas frecuentes u Otros."
-                ),
-                state=record.state,
-            )
-
-        route = self._router.route_turn(
+        graph_result = self._graph.run_turn(
             ConversationSnapshot(
-                vin=record.state.vin,
-                model=record.state.model,
-                entry_point=record.entry_point,
-                current_symptom=record.state.current_symptom,
+                vin=persisted.state.vin,
+                model=persisted.state.model,
+                entry_point=persisted.entry_point,
+                current_symptom=persisted.state.current_symptom,
+                current_node=persisted.state.current_node,
             ),
             user_message,
         )
-        if route == "tree_engine":
-            record.entry_point = "tree"
-            return SessionMessageResponse(
-                session_id=payload.session_id,
-                message=(
-                    "Vamos por Sintomas frecuentes. Selecciona: Paradas de motor o "
-                    "Testigo CELP encendido."
-                ),
-                state=record.state,
-            )
-        if route == "faq_matcher":
-            record.entry_point = "faq"
-            return SessionMessageResponse(
-                session_id=payload.session_id,
-                message="Estoy buscando la FAQ mas relevante para tu consulta.",
-                state=record.state,
-            )
-        if route == "free_text_parser":
-            record.entry_point = "other"
-            return SessionMessageResponse(
-                session_id=payload.session_id,
-                message="Describe el problema con tus palabras para analizarlo en la via Otros.",
-                state=record.state,
-            )
-
+        persisted.entry_point = graph_result.entry_point
+        self._apply_state_updates(persisted.state, graph_result.state_updates)
+        self._merge_orchestration_state(
+            persisted.state_json,
+            route=graph_result.route,
+            entry_point=graph_result.entry_point,
+            confidence=graph_result.confidence,
+        )
+        self._session_repository.save_turn(
+            payload.session_id,
+            steps=steps,
+            entry_point=persisted.entry_point,
+            state=persisted.state,
+            state_json=persisted.state_json,
+        )
+        self._save_decision_log(
+            session_id=payload.session_id,
+            module_name=graph_result.route,
+            input_data={"message": user_message},
+            output_data=graph_result.decision_output,
+            confidence=graph_result.confidence,
+        )
+        self._message_repository.save_message(payload.session_id, "assistant", graph_result.assistant_message)
         return SessionMessageResponse(
             session_id=payload.session_id,
-            message="Selecciona una opcion valida: Sintomas frecuentes, Consultas frecuentes u Otros.",
-            state=record.state,
+            message=graph_result.assistant_message,
+            state=persisted.state,
         )
 
     def get_session(self, session_id: UUID) -> SessionDetailResponse:
-        record = self._sessions.get(session_id)
-        if record is None:
+        persisted = self._session_repository.get_session(session_id)
+        if persisted is None:
             raise KeyError(f"Sesion no encontrada: {session_id}")
         return SessionDetailResponse(
-            session_id=record.session_id,
-            status=record.status,
-            entry_point=record.entry_point,
-            steps=record.steps,
-            state=record.state,
-            state_json=record.state_json,
+            session_id=persisted.session_id,
+            status=persisted.status,
+            entry_point=persisted.entry_point,
+            steps=persisted.steps,
+            state=persisted.state,
+            state_json=persisted.state_json,
         )
 
     def save_feedback(self, session_id: UUID, payload: SessionFeedbackRequest) -> FeedbackResponse:
-        record = self._sessions.get(session_id)
-        if record is None:
+        persisted = self._session_repository.get_session(session_id)
+        if persisted is None:
             raise KeyError(f"Sesion no encontrada: {session_id}")
-        self._feedback[session_id] = payload
-        record.status = "completed"
+        self._feedback_repository.save_feedback(session_id, payload.useful, payload.comment)
+        self._session_repository.complete_session(session_id)
+        self._save_decision_log(
+            session_id=session_id,
+            module_name="feedback",
+            input_data={"useful": payload.useful, "comment": payload.comment},
+            output_data={"result": "feedback_saved"},
+            confidence=1.0,
+        )
+        self._message_repository.save_message(session_id, "system", "Feedback guardado correctamente.")
         return FeedbackResponse(
             session_id=session_id,
             saved=True,
             message="Feedback guardado correctamente.",
         )
 
+    def _save_decision_log(
+        self,
+        *,
+        session_id: UUID,
+        module_name: str,
+        input_data: dict[str, Any],
+        output_data: dict[str, Any],
+        confidence: float | None,
+    ) -> None:
+        self._decision_log_repository.save_log(
+            session_id=session_id,
+            module_name=module_name,
+            input_data=input_data,
+            output_data=output_data,
+            confidence=confidence,
+        )
+
+    @staticmethod
+    def _apply_state_updates(state: SessionStateResponse, updates: dict[str, str | None]) -> None:
+        if "vin" in updates:
+            state.vin = updates["vin"]
+        if "model" in updates:
+            state.model = updates["model"]
+        if "current_symptom" in updates:
+            state.current_symptom = updates["current_symptom"]
+        if "current_node" in updates:
+            state.current_node = updates["current_node"]
+
+    @staticmethod
+    def _merge_orchestration_state(
+        state_json: dict[str, Any],
+        *,
+        route: str,
+        entry_point: str | None,
+        confidence: float,
+    ) -> None:
+        orchestration = state_json.get("orchestration")
+        if not isinstance(orchestration, dict):
+            orchestration = {}
+        orchestration.update(
+            {
+                "last_route": route,
+                "entry_point": entry_point,
+                "last_confidence": confidence,
+            }
+        )
+        state_json["orchestration"] = orchestration

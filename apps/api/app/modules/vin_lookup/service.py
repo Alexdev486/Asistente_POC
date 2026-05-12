@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from collections.abc import Callable
 
 
 @dataclass
@@ -11,6 +12,9 @@ class VehicleInfo:
 
 
 class VINLookupService:
+    def __init__(self, vehicle_resolver: Callable[[str], VehicleInfo | None] | None = None) -> None:
+        self._vehicle_resolver = vehicle_resolver
+
     _mock_db: dict[str, VehicleInfo] = {
         "AK550-POC-0001": VehicleInfo(
             vin="AK550-POC-0001",
@@ -44,5 +48,6 @@ class VINLookupService:
 
     def resolve(self, raw_vin: str) -> VehicleInfo | None:
         vin = raw_vin.strip().upper()
+        if self._vehicle_resolver is not None:
+            return self._vehicle_resolver(vin)
         return self._mock_db.get(vin)
-

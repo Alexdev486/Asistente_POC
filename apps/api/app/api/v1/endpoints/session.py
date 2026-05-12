@@ -3,6 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from app.application.use_cases.session_use_cases import SessionUseCases
+from app.infrastructure.db.repositories import (
+    DecisionLogRepository,
+    FeedbackRepository,
+    KnowledgeRepository,
+    MessageRepository,
+    SessionRepository,
+)
 from app.schemas.requests import (
     SessionFeedbackRequest,
     SessionMessageRequest,
@@ -16,7 +23,13 @@ from app.schemas.responses import (
 )
 
 router = APIRouter()
-session_use_cases = SessionUseCases()
+session_use_cases = SessionUseCases(
+    session_repository=SessionRepository(),
+    feedback_repository=FeedbackRepository(),
+    decision_log_repository=DecisionLogRepository(),
+    knowledge_repository=KnowledgeRepository(),
+    message_repository=MessageRepository(),
+)
 
 
 @router.post("/session/start", response_model=StartSessionResponse)
@@ -46,4 +59,3 @@ def save_feedback(session_id: UUID, payload: SessionFeedbackRequest) -> Feedback
         return session_use_cases.save_feedback(session_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
