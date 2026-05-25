@@ -487,7 +487,7 @@ make web-run
 | API-01 | F4 | API | Endpoints conectados al orquestador completo + BD real | ✅ Hecho | API E2E final | ORCH-02, BE-04 |
 | API-02 | F4 | API | `/metrics/summary` desde `v_metrics_summary` | ✅ Hecho | KPIs reales | BE-02 |
 | FE-01 | F4 | Frontend | Chat completo + salida estandar | ✅ Hecho | UX demo completa | API-01 |
-| QA-01 | F5 | QA | Unit + integration + e2e (CA-001..CA-010) | ⬜ Pendiente | Validacion tecnica de demo | FE-01, API-02 |
+| QA-01 | F5 | QA | Unit + integration + e2e (CA-001..CA-010) | ✅ Hecho | Validacion tecnica de demo | FE-01, API-02 |
 | REL-01 | F5 | Release | Checklist final de entrega | ⬜ Pendiente | Demo estable publicable | QA-01 |
 
 ### Tareas manuales tuyas (detalle por fase, solo lo no automatizable aqui)
@@ -502,9 +502,24 @@ make web-run
 | F4 | Presentacion en GitHub | 1) Preparar `README` con GIF/capturas del flujo completo. 2) Documentar comandos de arranque en 5 minutos. 3) Añadir seccion “Arquitectura y decisiones” para recruiters. |
 | F5 | Checklist de release demo | 1) Ejecutar bateria E2E final justo antes de publicar. 2) Comprobar que las claves no aparecen en logs/commits. 3) Etiquetar version (`v0.x-demo`) y dejar changelog corto. 4) Publicar enlace de demo y video corto (1-3 min). |
 
+### QA: casos de aceptacion (CA-001..CA-010)
+
+1. **CA-001**: inicio de sesion devuelve `session_id` y mensaje de bienvenida.
+2. **CA-002**: VIN valido resuelve modelo y muestra menu principal.
+3. **CA-003**: VIN invalido devuelve aviso de error sin romper sesion.
+4. **CA-004**: FAQ por modelo responde con texto de FAQ y registra `decision_logs`.
+5. **CA-005**: arbol de sintomas navega preguntas y llega a diagnostico final.
+6. **CA-006**: modulo Otros (texto libre) devuelve top-3 de hipotesis con fuentes.
+7. **CA-007**: `session_state` persiste `vin`, `model`, `current_symptom` y `current_node`.
+8. **CA-008**: feedback marca sesion como completada y persiste en BD.
+9. **CA-009**: `/metrics/summary` devuelve contadores coherentes.
+10. **CA-010**: trazabilidad completa en `messages` y `decision_logs` por turno.
+
+Ejecucion recomendada: `make qa` (o `bash scripts/dev/run_qa.sh`).
+
 ### Siguiente tarea concreta
 
-**QA-01**: unit + integration + e2e (CA-001..CA-010).
+**REL-01**: checklist final de entrega.
 
 ---
 
@@ -524,7 +539,7 @@ La POC se considera cerrada cuando:
 ## Instrucciones para la siguiente sesion
 
 1. Leer este `README.md` completo.
-2. Continuar por **QA-01**.
+2. Continuar por **REL-01**.
 3. Mantener foco en:
    - estado en BD,
    - trazabilidad (`messages`, `decision_logs`),
