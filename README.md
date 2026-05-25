@@ -483,7 +483,7 @@ make web-run
 | OTH-01 | F3 | Otros | Parsing libre (reglas + LLM) con Groq/OpenRouter | ✅ Hecho | Tags/categoria robusta en demo | ORCH-02 |
 | OTH-02 | F3 | Otros | Ingestion de `knowledge_chunks` | ✅ Hecho | Corpus vectorial inicial | BE-03 |
 | OTH-03 | F3 | Otros | Worker de `embedding_jobs` | ✅ Hecho | Embeddings operativos | OTH-02 |
-| OTH-04 | F3 | Otros | Retrieval `hybrid_search` + top-3 definitivo | ⬜ Pendiente | Modulo Otros completo | OTH-03 |
+| OTH-04 | F3 | Otros | Retrieval `hybrid_search` + top-3 definitivo | ✅ Hecho | Modulo Otros completo | OTH-03 |
 | API-01 | F4 | API | Endpoints conectados al orquestador completo + BD real | ⬜ Pendiente | API E2E final | ORCH-02, BE-04 |
 | API-02 | F4 | API | `/metrics/summary` desde `v_metrics_summary` | ✅ Hecho | KPIs reales | BE-02 |
 | FE-01 | F4 | Frontend | Chat completo + salida estandar | ⬜ Pendiente | UX demo completa | API-01 |
@@ -504,7 +504,7 @@ make web-run
 
 ### Siguiente tarea concreta
 
-**OTH-04**: retrieval real sobre `hybrid_search` usando embeddings generados y top-3 final de demo.
+**API-01**: endpoints conectados al orquestador completo + BD real para flujo E2E.
 
 ---
 
@@ -524,7 +524,7 @@ La POC se considera cerrada cuando:
 ## Instrucciones para la siguiente sesion
 
 1. Leer este `README.md` completo.
-2. Continuar por **OTH-04**.
+2. Continuar por **API-01**.
 3. Mantener foco en:
    - estado en BD,
    - trazabilidad (`messages`, `decision_logs`),

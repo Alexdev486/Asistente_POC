@@ -3,7 +3,7 @@ from typing import Any, Callable, Literal, TypedDict
 
 from app.modules.faq_matcher.service import FAQItem, FAQMatch
 from app.modules.free_text_parser.service import ParsedFreeText
-from app.modules.historical_retrieval.service import HistoricalCase, RetrievalCandidate
+from app.modules.historical_retrieval.service import RetrievalCandidate
 from app.modules.hybrid_ranking.service import RankedHypothesis
 from app.modules.tree_engine.service import DiagnosticTreeEngine
 from app.modules.vin_lookup.service import VehicleInfo
@@ -63,10 +63,10 @@ class ConversationGraph:
         list_active_faqs: Callable[[str | None], list[FAQItem]],
         list_active_tree_symptoms: Callable[[str | None], list[str]],
         get_active_tree_by_symptom: Callable[[str | None, str], dict | None],
-        list_historical_cases: Callable[[str], list[HistoricalCase]],
         parse_free_text: Callable[[str], ParsedFreeText],
         faq_match: Callable[[str, str, list[FAQItem]], FAQMatch | None],
-        historical_retrieve: Callable[[str, str, list[HistoricalCase]], list[RetrievalCandidate]],
+        embed_text: Callable[[str], list[float]],
+        hybrid_search: Callable[[list[float], str, str | None, str | None, int], list[RetrievalCandidate]],
         rank_hypotheses: Callable[[list[RetrievalCandidate], int], list[RankedHypothesis]],
         tree_engine: DiagnosticTreeEngine,
     ) -> None:
@@ -74,10 +74,10 @@ class ConversationGraph:
         self._list_active_faqs = list_active_faqs
         self._list_active_tree_symptoms = list_active_tree_symptoms
         self._get_active_tree_by_symptom = get_active_tree_by_symptom
-        self._list_historical_cases = list_historical_cases
         self._parse_free_text = parse_free_text
         self._faq_match = faq_match
-        self._historical_retrieve = historical_retrieve
+        self._embed_text = embed_text
+        self._hybrid_search = hybrid_search
         self._rank_hypotheses = rank_hypotheses
         self._tree_engine = tree_engine
 
@@ -351,13 +351,25 @@ class ConversationGraph:
             }
             return
 
-        cases = self._list_historical_cases(state["model"])
-        candidates = self._historical_retrieve(state["model"], parsed.normalized_text, cases)
-        ranked = self._rank_hypotheses(candidates, 3)
+        query_text = state["user_message"]
+        query_embedding = self._embed_text(parsed.normalized_text or query_text)
+        candidates = self._hybrid_search(
+            query_embedding,
+            query_text,
+            state["model"],
+            parsed.symptom_category,
+            12,
+        )
+        preferred = [candidate for candidate in candidates if candidate.source_type == "historical_case"]
+        ranked = self._rank_hypotheses(preferred or candidates, 3)
 
         if ranked:
             primary = ranked[0].diagnosis
             alternatives = ", ".join(h.diagnosis for h in ranked[1:]) or "sin alternativas"
+            sources = [
+                {"source_type": c.source_type, "source_id": c.source_id}
+                for c in (preferred or candidates)[:3]
+            ]
             state["assistant_message"] = (
                 f"Hipotesis principal: {primary}. Alternativas: {alternatives}. "
                 "Si quieres, te guio por comprobaciones paso a paso."
@@ -372,6 +384,7 @@ class ConversationGraph:
                 "symptom_category": parsed.symptom_category,
                 "reasoning_short": parsed.reasoning_short,
                 "parser_source": parsed.parser_source,
+                "sources": sources,
             }
             return
 

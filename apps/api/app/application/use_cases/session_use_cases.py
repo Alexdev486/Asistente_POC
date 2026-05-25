@@ -14,10 +14,10 @@ from app.infrastructure.llm.providers.groq import GroqProvider
 from app.infrastructure.llm.providers.openrouter import OpenRouterProvider
 from app.modules.faq_matcher.service import FAQMatcherService
 from app.modules.free_text_parser.service import FreeTextParserService
-from app.modules.historical_retrieval.service import HistoricalRetrievalService
 from app.modules.hybrid_ranking.service import HybridRankingService
 from app.modules.tree_engine.service import DiagnosticTreeEngine
 from app.modules.vin_lookup.service import VINLookupService
+from app.infrastructure.retrieval.embeddings import EmbeddingService
 from app.schemas.requests import SessionFeedbackRequest, SessionMessageRequest, StartSessionRequest
 from app.schemas.responses import (
     FeedbackResponse,
@@ -46,7 +46,7 @@ class SessionUseCases:
         self._faq_matcher = FAQMatcherService()
         self._llm_gateway = LLMGateway(primary=GroqProvider(), fallback=OpenRouterProvider())
         self._free_text_parser = FreeTextParserService(llm_gateway=self._llm_gateway)
-        self._historical_retrieval = HistoricalRetrievalService()
+        self._embedding_service = EmbeddingService()
         self._hybrid_ranking = HybridRankingService()
         self._tree_engine = DiagnosticTreeEngine()
         self._graph = ConversationGraph(
@@ -54,10 +54,10 @@ class SessionUseCases:
             list_active_faqs=self._knowledge_repository.list_active_faqs,
             list_active_tree_symptoms=self._knowledge_repository.list_active_tree_symptoms,
             get_active_tree_by_symptom=self._knowledge_repository.get_active_tree_by_symptom,
-            list_historical_cases=self._knowledge_repository.list_historical_cases,
             parse_free_text=self._free_text_parser.parse,
             faq_match=self._faq_matcher.match,
-            historical_retrieve=self._historical_retrieval.retrieve,
+            embed_text=self._embedding_service.embed,
+            hybrid_search=self._knowledge_repository.search_hybrid,
             rank_hypotheses=self._hybrid_ranking.rank,
             tree_engine=self._tree_engine,
         )

@@ -1,8 +1,10 @@
+import re
+
 from psycopg2.extras import RealDictCursor
 
 from app.infrastructure.db.sync_connection import db_connection
 from app.modules.faq_matcher.service import FAQItem
-from app.modules.historical_retrieval.service import HistoricalCase
+from app.modules.historical_retrieval.service import HistoricalCase, RetrievalCandidate
 from app.modules.vin_lookup.service import VehicleInfo
 
 
@@ -110,3 +112,78 @@ class KnowledgeRepository:
         if row is None:
             return None
         return row["tree_json"]
+
+    def search_hybrid(
+        self,
+        *,
+        query_embedding: list[float],
+        query_text: str,
+        model: str | None,
+        symptom: str | None,
+        limit: int = 10,
+    ) -> list[RetrievalCandidate]:
+        vector_literal = self._to_vector_literal(query_embedding)
+        with db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    hs.chunk_id,
+                    hs.source_type,
+                    hs.source_id,
+                    hs.model,
+                    hs.symptom_category,
+                    hs.text_chunk,
+                    hs.vector_score,
+                    hs.lexical_score,
+                    hs.hybrid_score,
+                    kc.base_confidence
+                FROM hybrid_search(%s::vector, %s, %s, %s, %s) AS hs
+                JOIN knowledge_chunks kc ON kc.chunk_id = hs.chunk_id
+                """,
+                (vector_literal, query_text, model, symptom, limit),
+            )
+            rows = cur.fetchall()
+
+        candidates: list[RetrievalCandidate] = []
+        for row in rows:
+            diagnosis = self._extract_diagnosis(row["source_type"], row["text_chunk"])
+            base_confidence = float(row["base_confidence"]) if row["base_confidence"] is not None else 0.5
+            if model is None or row["model"] is None or row["model"] == model:
+                model_match = 1.0
+            else:
+                model_match = 0.8
+            candidates.append(
+                RetrievalCandidate(
+                    case_id=str(row["chunk_id"]),
+                    diagnosis=diagnosis,
+                    vector_score=float(row["vector_score"] or 0.0),
+                    lexical_score=float(row["lexical_score"] or 0.0),
+                    model_match=model_match,
+                    base_confidence=base_confidence,
+                    frequency=1,
+                    source_type=row["source_type"],
+                    source_id=row["source_id"],
+                    text_chunk=row["text_chunk"],
+                )
+            )
+        return candidates
+
+    @staticmethod
+    def _to_vector_literal(values: list[float]) -> str:
+        return "[" + ",".join(f"{value:.6f}" for value in values) + "]"
+
+    @staticmethod
+    def _extract_diagnosis(source_type: str | None, text_chunk: str) -> str:
+        if source_type == "historical_case":
+            match = re.search(r"Diagnostico final:\s*(.+)", text_chunk, re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+        if source_type == "tree_node":
+            match = re.search(r"\]:\s*(.+)", text_chunk)
+            if match:
+                return match.group(1).strip()
+        if source_type == "faq":
+            match = re.search(r"FAQ:\s*(.+)", text_chunk, re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+        return text_chunk.strip()[:160]

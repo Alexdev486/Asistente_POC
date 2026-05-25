@@ -21,6 +21,9 @@ class RetrievalCandidate:
     model_match: float
     base_confidence: float
     frequency: int
+    source_type: str | None = None
+    source_id: str | None = None
+    text_chunk: str | None = None
 
 
 class HistoricalRetrievalService:
@@ -47,6 +50,9 @@ class HistoricalRetrievalService:
                     model_match=1.0,
                     base_confidence=case.base_confidence,
                     frequency=case.frequency,
+                    source_type="historical_case",
+                    source_id=case.case_id,
+                    text_chunk=case.case_text,
                 )
             )
         return candidates
@@ -56,4 +62,3 @@ class HistoricalRetrievalService:
         if not query_tokens:
             return 0.0
         return len(query_tokens.intersection(case_tokens)) / len(query_tokens)
-
