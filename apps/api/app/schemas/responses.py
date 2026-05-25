@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 from uuid import UUID
 
@@ -20,6 +22,7 @@ class SessionMessageResponse(BaseModel):
     session_id: UUID
     message: str
     state: SessionStateResponse | None = None
+    diagnostic_output: DiagnosticOutputResponse | None = None
 
 
 class SessionDetailResponse(BaseModel):
@@ -41,11 +44,13 @@ class MetricsSummaryResponse(BaseModel):
     total_sessions: int
     completed_sessions: int
     avg_steps_per_session: float
+    avg_session_seconds: float
     faq_usage: int
     tree_usage: int
     other_usage: int
     positive_feedback: int
     negative_feedback: int
+    most_frequent_final_result: str | None = None
 
 
 class DiagnosticOutputResponse(BaseModel):
@@ -54,4 +59,3 @@ class DiagnosticOutputResponse(BaseModel):
     next_check: str
     short_explanation: str
     confidence: float = Field(ge=0.0, le=1.0)
-

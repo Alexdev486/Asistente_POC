@@ -28,6 +28,7 @@ class ConversationSnapshot:
     entry_point: str | None
     current_symptom: str | None
     current_node: str | None
+    asked_questions: list[str]
 
 
 class ConversationState(TypedDict):
@@ -38,6 +39,7 @@ class ConversationState(TypedDict):
     entry_point: EntryPoint | None
     current_symptom: str | None
     current_node: str | None
+    asked_questions: list[str]
     route: Route
     assistant_message: str
     confidence: float
@@ -90,6 +92,7 @@ class ConversationGraph:
             "entry_point": snapshot.entry_point if snapshot.entry_point in {"faq", "tree", "other"} else None,
             "current_symptom": snapshot.current_symptom,
             "current_node": snapshot.current_node,
+            "asked_questions": list(snapshot.asked_questions),
             "route": "menu_selection",
             "assistant_message": "",
             "confidence": 0.6,
@@ -106,6 +109,8 @@ class ConversationGraph:
             self._node_faq_matcher(state)
         elif state["route"] == "free_text_parser":
             self._node_free_text_parser(state)
+        elif state["route"] == "out_of_scope":
+            self._node_out_of_scope(state)
         else:
             self._node_menu_selection(state)
 
@@ -138,7 +143,7 @@ class ConversationGraph:
         if state["entry_point"] == "other":
             return "free_text_parser"
 
-        return "menu_selection"
+        return "out_of_scope"
 
     def _node_vin_lookup(self, state: ConversationState) -> None:
         vehicle = self._resolve_vin(state["user_message"])
@@ -191,6 +196,22 @@ class ConversationGraph:
             if step.node_type == "question":
                 node_answers = tree_json["nodes"][step.node_id].get("answers", {})
                 options = ", ".join(node_answers.keys()) if node_answers else "si/no"
+                if step.node_id in state["asked_questions"]:
+                    state["assistant_message"] = (
+                        "Ya hemos cubierto esa pregunta. "
+                        "Si quieres, elige otro sintoma o cambia a FAQ/Otros."
+                    )
+                    state["confidence"] = 0.4
+                    state["state_updates"]["current_node"] = None
+                    state["state_updates"]["current_symptom"] = None
+                    state["decision_output"] = {
+                        "route": "tree_engine",
+                        "entry_point": "tree",
+                        "result": "question_repeated",
+                        "current_symptom": state["current_symptom"],
+                        "current_node": step.node_id,
+                    }
+                    return
                 state["assistant_message"] = f"{step.question} (Opciones: {options})"
                 state["confidence"] = 0.92
                 state["state_updates"]["current_node"] = step.node_id
@@ -203,18 +224,27 @@ class ConversationGraph:
                 }
                 return
 
+            diagnostic_output = self._build_diagnostic_output(
+                primary=step.diagnosis,
+                alternatives=[],
+                next_check=f"Revisar el componente asociado: {step.diagnosis}.",
+                short_explanation="Resultado del arbol de diagnostico.",
+                confidence=0.97,
+            )
             state["assistant_message"] = (
                 f"Diagnostico probable (arbol): {step.diagnosis}. "
-                "Si quieres seguimos con otra rama o validamos por FAQ/Otros."
+                "¿Te ha sido util este resultado? Puedes responder desde feedback."
             )
             state["confidence"] = 0.97
             state["state_updates"]["current_node"] = None
+            state["state_updates"]["current_symptom"] = None
             state["decision_output"] = {
                 "route": "tree_engine",
                 "entry_point": "tree",
                 "result": "diagnosis",
                 "current_symptom": state["current_symptom"],
                 "diagnosis": step.diagnosis,
+                "diagnostic_output": diagnostic_output,
             }
             return
 
@@ -264,6 +294,22 @@ class ConversationGraph:
         if step.node_type == "question":
             node_answers = tree_json["nodes"][step.node_id].get("answers", {})
             options = ", ".join(node_answers.keys()) if node_answers else "si/no"
+            if step.node_id in state["asked_questions"]:
+                state["assistant_message"] = (
+                    "Ya hemos cubierto esa pregunta. "
+                    "Elige otro sintoma o cambia a FAQ/Otros."
+                )
+                state["confidence"] = 0.4
+                state["state_updates"]["current_node"] = None
+                state["state_updates"]["current_symptom"] = None
+                state["decision_output"] = {
+                    "route": "tree_engine",
+                    "entry_point": "tree",
+                    "result": "question_repeated",
+                    "current_symptom": selected_symptom,
+                    "current_node": step.node_id,
+                }
+                return
             state["assistant_message"] = f"{step.question} (Opciones: {options})"
             state["confidence"] = 0.93
             state["state_updates"]["current_node"] = step.node_id
@@ -276,18 +322,27 @@ class ConversationGraph:
             }
             return
 
+        diagnostic_output = self._build_diagnostic_output(
+            primary=step.diagnosis,
+            alternatives=[],
+            next_check=f"Revisar el componente asociado: {step.diagnosis}.",
+            short_explanation="Resultado del arbol de diagnostico.",
+            confidence=0.97,
+        )
         state["assistant_message"] = (
             f"Diagnostico probable (arbol): {step.diagnosis}. "
-            "Si quieres seguimos con otra rama o validamos por FAQ/Otros."
+            "¿Te ha sido util este resultado? Puedes responder desde feedback."
         )
         state["confidence"] = 0.97
         state["state_updates"]["current_node"] = None
+        state["state_updates"]["current_symptom"] = None
         state["decision_output"] = {
             "route": "tree_engine",
             "entry_point": "tree",
             "result": "diagnosis",
             "current_symptom": selected_symptom,
             "diagnosis": step.diagnosis,
+            "diagnostic_output": diagnostic_output,
         }
 
     def _node_faq_matcher(self, state: ConversationState) -> None:
@@ -363,6 +418,26 @@ class ConversationGraph:
         preferred = [candidate for candidate in candidates if candidate.source_type == "historical_case"]
         ranked = self._rank_hypotheses(preferred or candidates, 3)
 
+        if not ranked:
+            faqs = self._list_active_faqs(state["model"])
+            match = self._faq_match(state["model"] or "", state["user_message"], faqs)
+            if match:
+                state["assistant_message"] = f"FAQ encontrada: {match.item.answer}"
+                state["confidence"] = max(0.25, min(match.score, 1.0))
+                state["decision_output"] = {
+                    "route": "free_text_parser",
+                    "entry_point": "other",
+                    "result": "faq_fallback",
+                    "faq_id": match.item.faq_id,
+                    "score": match.score,
+                    "scope": match.scope,
+                    "tags": parsed.tags,
+                    "symptom_category": parsed.symptom_category,
+                    "reasoning_short": parsed.reasoning_short,
+                    "parser_source": parsed.parser_source,
+                }
+                return
+
         if ranked:
             primary = ranked[0].diagnosis
             alternatives = ", ".join(h.diagnosis for h in ranked[1:]) or "sin alternativas"
@@ -370,9 +445,16 @@ class ConversationGraph:
                 {"source_type": c.source_type, "source_id": c.source_id}
                 for c in (preferred or candidates)[:3]
             ]
+            diagnostic_output = self._build_diagnostic_output(
+                primary=primary,
+                alternatives=[h.diagnosis for h in ranked[1:]],
+                next_check=f"Verificar hipotesis principal: {primary}.",
+                short_explanation=parsed.reasoning_short,
+                confidence=max(0.0, min(ranked[0].score, 1.0)),
+            )
             state["assistant_message"] = (
                 f"Hipotesis principal: {primary}. Alternativas: {alternatives}. "
-                "Si quieres, te guio por comprobaciones paso a paso."
+                "¿Te ha sido util este resultado? Puedes responder desde feedback."
             )
             state["confidence"] = max(0.0, min(ranked[0].score, 1.0))
             state["decision_output"] = {
@@ -385,6 +467,7 @@ class ConversationGraph:
                 "reasoning_short": parsed.reasoning_short,
                 "parser_source": parsed.parser_source,
                 "sources": sources,
+                "diagnostic_output": diagnostic_output,
             }
             return
 
@@ -405,3 +488,29 @@ class ConversationGraph:
         state["assistant_message"] = "Selecciona una opcion valida: Sintomas frecuentes, Consultas frecuentes u Otros."
         state["confidence"] = 0.6
         state["decision_output"] = {"route": "menu_selection", "entry_point": state["entry_point"]}
+
+    @staticmethod
+    def _node_out_of_scope(state: ConversationState) -> None:
+        state["assistant_message"] = (
+            "Esa consulta esta fuera del alcance de la POC. "
+            "Selecciona: Sintomas frecuentes, Consultas frecuentes u Otros."
+        )
+        state["confidence"] = 0.2
+        state["decision_output"] = {"route": "out_of_scope", "entry_point": state["entry_point"]}
+
+    @staticmethod
+    def _build_diagnostic_output(
+        *,
+        primary: str,
+        alternatives: list[str],
+        next_check: str,
+        short_explanation: str,
+        confidence: float,
+    ) -> dict[str, Any]:
+        return {
+            "primary_hypothesis": primary,
+            "alternatives": alternatives,
+            "next_check": next_check,
+            "short_explanation": short_explanation,
+            "confidence": max(0.0, min(confidence, 1.0)),
+        }

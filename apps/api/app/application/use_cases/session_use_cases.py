@@ -92,6 +92,10 @@ class SessionUseCases:
         user_message = payload.message.strip()
         self._message_repository.save_message(payload.session_id, "user", user_message)
 
+        asked_questions = persisted.state_json.get("asked_questions")
+        if not isinstance(asked_questions, list):
+            asked_questions = []
+
         graph_result = self._graph.run_turn(
             ConversationSnapshot(
                 vin=persisted.state.vin,
@@ -99,6 +103,7 @@ class SessionUseCases:
                 entry_point=persisted.entry_point,
                 current_symptom=persisted.state.current_symptom,
                 current_node=persisted.state.current_node,
+                asked_questions=[str(item) for item in asked_questions],
             ),
             user_message,
         )
@@ -110,6 +115,8 @@ class SessionUseCases:
             entry_point=graph_result.entry_point,
             confidence=graph_result.confidence,
         )
+        self._update_diagnostic_state(persisted.state_json, graph_result.decision_output)
+        final_result = self._extract_final_result(graph_result.decision_output)
         self._session_repository.save_turn(
             payload.session_id,
             steps=steps,
@@ -117,6 +124,8 @@ class SessionUseCases:
             state=persisted.state,
             state_json=persisted.state_json,
         )
+        if final_result:
+            self._session_repository.set_final_result(payload.session_id, final_result)
         self._save_decision_log(
             session_id=payload.session_id,
             module_name=graph_result.route,
@@ -124,11 +133,13 @@ class SessionUseCases:
             output_data=graph_result.decision_output,
             confidence=graph_result.confidence,
         )
+        self._save_additional_logs(payload.session_id, graph_result.decision_output)
         self._message_repository.save_message(payload.session_id, "assistant", graph_result.assistant_message)
         return SessionMessageResponse(
             session_id=payload.session_id,
             message=graph_result.assistant_message,
             state=persisted.state,
+            diagnostic_output=graph_result.decision_output.get("diagnostic_output"),
         )
 
     def get_session(self, session_id: UUID) -> SessionDetailResponse:
@@ -181,6 +192,32 @@ class SessionUseCases:
             confidence=confidence,
         )
 
+    def _save_additional_logs(self, session_id: UUID, decision_output: dict[str, Any]) -> None:
+        if "sources" in decision_output:
+            self._save_decision_log(
+                session_id=session_id,
+                module_name="historical_retrieval",
+                input_data={"sources": decision_output.get("sources", [])},
+                output_data={"result": "retrieved_candidates"},
+                confidence=decision_output.get("top_score"),
+            )
+        if "top_hypotheses" in decision_output:
+            self._save_decision_log(
+                session_id=session_id,
+                module_name="hybrid_ranking",
+                input_data={"top_hypotheses": decision_output.get("top_hypotheses", [])},
+                output_data={"top_score": decision_output.get("top_score")},
+                confidence=decision_output.get("top_score"),
+            )
+        if "diagnostic_output" in decision_output:
+            self._save_decision_log(
+                session_id=session_id,
+                module_name="response_builder",
+                input_data={"source": decision_output.get("route")},
+                output_data=decision_output.get("diagnostic_output", {}),
+                confidence=decision_output.get("diagnostic_output", {}).get("confidence"),
+            )
+
     @staticmethod
     def _apply_state_updates(state: SessionStateResponse, updates: dict[str, str | None]) -> None:
         if "vin" in updates:
@@ -211,3 +248,30 @@ class SessionUseCases:
             }
         )
         state_json["orchestration"] = orchestration
+
+    @staticmethod
+    def _update_diagnostic_state(state_json: dict[str, Any], decision_output: dict[str, Any]) -> None:
+        asked_questions = state_json.get("asked_questions")
+        if not isinstance(asked_questions, list):
+            asked_questions = []
+
+        if decision_output.get("result") == "question" and decision_output.get("current_node"):
+            node_id = str(decision_output["current_node"])
+            if node_id not in asked_questions:
+                asked_questions.append(node_id)
+        state_json["asked_questions"] = asked_questions
+
+        diagnostic_output = decision_output.get("diagnostic_output")
+        if isinstance(diagnostic_output, dict):
+            hypothesis = {
+                "label": diagnostic_output.get("primary_hypothesis"),
+                "score": diagnostic_output.get("confidence"),
+            }
+            state_json["active_hypotheses"] = [hypothesis]
+
+    @staticmethod
+    def _extract_final_result(decision_output: dict[str, Any]) -> str | None:
+        diagnostic_output = decision_output.get("diagnostic_output")
+        if isinstance(diagnostic_output, dict) and diagnostic_output.get("primary_hypothesis"):
+            return str(diagnostic_output["primary_hypothesis"])
+        return None

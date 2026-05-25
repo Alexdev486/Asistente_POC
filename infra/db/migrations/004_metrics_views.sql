@@ -3,7 +3,11 @@ WITH session_stats AS (
     SELECT
         COUNT(*)::INT AS total_sessions,
         COUNT(*) FILTER (WHERE status = 'completed' OR ended_at IS NOT NULL)::INT AS completed_sessions,
-        ROUND(COALESCE(AVG(total_steps), 0), 2)::NUMERIC AS avg_steps_per_session
+        ROUND(COALESCE(AVG(total_steps), 0), 2)::NUMERIC AS avg_steps_per_session,
+        ROUND(
+            COALESCE(AVG(EXTRACT(EPOCH FROM (ended_at - started_at))), 0),
+            2
+        )::NUMERIC AS avg_session_seconds
     FROM sessions
 ),
 module_usage AS (
@@ -33,6 +37,7 @@ SELECT
     ss.total_sessions,
     ss.completed_sessions,
     ss.avg_steps_per_session,
+    ss.avg_session_seconds,
     mu.faq_usage,
     mu.tree_usage,
     mu.other_usage,
@@ -42,4 +47,3 @@ SELECT
 FROM session_stats ss
 CROSS JOIN module_usage mu
 CROSS JOIN feedback_stats fs;
-

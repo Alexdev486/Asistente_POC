@@ -130,6 +130,17 @@ class SessionRepository:
             if cur.rowcount == 0:
                 raise KeyError(f"Sesion no encontrada: {session_id}")
 
+    def set_final_result(self, session_id: UUID, final_result: str) -> None:
+        with db_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE sessions
+                SET final_result = %s
+                WHERE session_id = %s
+                """,
+                (final_result, str(session_id)),
+            )
+
     @staticmethod
     def _dumps_json(data: dict[str, Any]) -> str:
         import json
