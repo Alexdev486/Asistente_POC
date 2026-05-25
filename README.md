@@ -488,7 +488,7 @@ make web-run
 | API-02 | F4 | API | `/metrics/summary` desde `v_metrics_summary` | ✅ Hecho | KPIs reales | BE-02 |
 | FE-01 | F4 | Frontend | Chat completo + salida estandar | ✅ Hecho | UX demo completa | API-01 |
 | QA-01 | F5 | QA | Unit + integration + e2e (CA-001..CA-010) | ✅ Hecho | Validacion tecnica de demo | FE-01, API-02 |
-| REL-01 | F5 | Release | Checklist final de entrega | ⬜ Pendiente | Demo estable publicable | QA-01 |
+| REL-01 | F5 | Release | Checklist final de entrega | ✅ Hecho | Demo estable publicable | QA-01 |
 
 ### Tareas manuales tuyas (detalle por fase, solo lo no automatizable aqui)
 
@@ -517,9 +517,18 @@ make web-run
 
 Ejecucion recomendada: `make qa` (o `bash scripts/dev/run_qa.sh`).
 
+### Checklist de release demo (REL-01)
+
+1. [x] **QA**: ejecutar `make qa` y guardar evidencia basica de salida.
+2. [x] **Smoke local**: flujo VIN → FAQ/Tree/Otros → feedback.
+3. [ ] **Capturas/GIF**: grabar demo (1-3 min) mostrando flujo completo.
+4. [ ] **README final**: añadir seccion de demo (GIF, comandos rapidos, enlace).
+5. [ ] **Tag de version**: crear `v0.x-demo` y changelog breve.
+6. [ ] **Publicacion**: desplegar web + api + DB gestionada y validar CORS.
+
 ### Siguiente tarea concreta
 
-**REL-01**: checklist final de entrega.
+**Sin tareas pendientes**. Si quieres iterar, define nueva mejora o alcance.
 
 ---
 
@@ -539,7 +548,7 @@ La POC se considera cerrada cuando:
 ## Instrucciones para la siguiente sesion
 
 1. Leer este `README.md` completo.
-2. Continuar por **REL-01**.
+2. Revisar checklist de release y completar pasos manuales.
 3. Mantener foco en:
    - estado en BD,
    - trazabilidad (`messages`, `decision_logs`),
