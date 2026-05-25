@@ -486,7 +486,7 @@ make web-run
 | OTH-04 | F3 | Otros | Retrieval `hybrid_search` + top-3 definitivo | ✅ Hecho | Modulo Otros completo | OTH-03 |
 | API-01 | F4 | API | Endpoints conectados al orquestador completo + BD real | ✅ Hecho | API E2E final | ORCH-02, BE-04 |
 | API-02 | F4 | API | `/metrics/summary` desde `v_metrics_summary` | ✅ Hecho | KPIs reales | BE-02 |
-| FE-01 | F4 | Frontend | Chat completo + salida estandar | ⬜ Pendiente | UX demo completa | API-01 |
+| FE-01 | F4 | Frontend | Chat completo + salida estandar | ✅ Hecho | UX demo completa | API-01 |
 | QA-01 | F5 | QA | Unit + integration + e2e (CA-001..CA-010) | ⬜ Pendiente | Validacion tecnica de demo | FE-01, API-02 |
 | REL-01 | F5 | Release | Checklist final de entrega | ⬜ Pendiente | Demo estable publicable | QA-01 |
 
@@ -504,7 +504,7 @@ make web-run
 
 ### Siguiente tarea concreta
 
-**FE-01**: chat completo + salida estandar para demo (UI).
+**QA-01**: unit + integration + e2e (CA-001..CA-010).
 
 ---
 
@@ -524,7 +524,7 @@ La POC se considera cerrada cuando:
 ## Instrucciones para la siguiente sesion
 
 1. Leer este `README.md` completo.
-2. Continuar por **FE-01**.
+2. Continuar por **QA-01**.
 3. Mantener foco en:
    - estado en BD,
    - trazabilidad (`messages`, `decision_logs`),
