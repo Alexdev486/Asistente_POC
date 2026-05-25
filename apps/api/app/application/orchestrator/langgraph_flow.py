@@ -354,11 +354,11 @@ class ConversationGraph:
         query_text = state["user_message"]
         query_embedding = self._embed_text(parsed.normalized_text or query_text)
         candidates = self._hybrid_search(
-            query_embedding,
-            query_text,
-            state["model"],
-            parsed.symptom_category,
-            12,
+            query_embedding=query_embedding,
+            query_text=query_text,
+            model=state["model"],
+            symptom=parsed.symptom_category,
+            limit=12,
         )
         preferred = [candidate for candidate in candidates if candidate.source_type == "historical_case"]
         ranked = self._rank_hypotheses(preferred or candidates, 3)

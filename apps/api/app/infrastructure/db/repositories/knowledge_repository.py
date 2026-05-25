@@ -137,10 +137,18 @@ class KnowledgeRepository:
                     hs.lexical_score,
                     hs.hybrid_score,
                     kc.base_confidence
-                FROM hybrid_search(%s::vector, %s, %s, %s, %s) AS hs
+                FROM hybrid_search(
+                    %s::vector,
+                    %s::text,
+                    %s::varchar,
+                    %s::varchar,
+                    %s::integer,
+                    %s::double precision,
+                    %s::double precision
+                ) AS hs
                 JOIN knowledge_chunks kc ON kc.chunk_id = hs.chunk_id
                 """,
-                (vector_literal, query_text, model, symptom, limit),
+                (vector_literal, query_text, model, symptom, limit, 0.75, 0.25),
             )
             rows = cur.fetchall()
 
