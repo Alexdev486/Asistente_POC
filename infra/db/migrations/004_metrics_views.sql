@@ -1,4 +1,5 @@
-CREATE OR REPLACE VIEW v_metrics_summary AS
+DROP VIEW IF EXISTS v_metrics_summary;
+CREATE VIEW v_metrics_summary AS
 WITH session_stats AS (
     SELECT
         COUNT(*)::INT AS total_sessions,

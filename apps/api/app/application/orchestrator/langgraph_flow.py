@@ -190,6 +190,8 @@ class ConversationGraph:
                     "entry_point": "tree",
                     "result": "invalid_answer",
                     "current_node": state["current_node"],
+                    "answered_node": state["current_node"],
+                    "answer": state["user_message"],
                 }
                 return
 
@@ -221,6 +223,8 @@ class ConversationGraph:
                     "result": "question",
                     "current_symptom": state["current_symptom"],
                     "current_node": step.node_id,
+                    "answered_node": state["current_node"],
+                    "answer": state["user_message"],
                 }
                 return
 
@@ -245,6 +249,8 @@ class ConversationGraph:
                 "current_symptom": state["current_symptom"],
                 "diagnosis": step.diagnosis,
                 "diagnostic_output": diagnostic_output,
+                "answered_node": state["current_node"],
+                "answer": state["user_message"],
             }
             return
 
@@ -351,7 +357,17 @@ class ConversationGraph:
         match = self._faq_match(state["model"] or "", state["user_message"], faqs)
 
         if match:
-            state["assistant_message"] = f"FAQ encontrada: {match.item.answer}"
+            diagnostic_output = self._build_diagnostic_output(
+                primary=match.item.answer,
+                alternatives=[],
+                next_check="Aplicar la recomendacion de la FAQ y validar el resultado.",
+                short_explanation=f"FAQ: {match.item.question}",
+                confidence=max(0.25, min(match.score, 1.0)),
+            )
+            state["assistant_message"] = (
+                f"FAQ encontrada: {match.item.answer} "
+                "¿Te ha sido util este resultado? Puedes responder desde feedback."
+            )
             state["confidence"] = max(0.25, min(match.score, 1.0))
             state["decision_output"] = {
                 "route": "faq_matcher",
@@ -359,6 +375,7 @@ class ConversationGraph:
                 "faq_id": match.item.faq_id,
                 "score": match.score,
                 "scope": match.scope,
+                "diagnostic_output": diagnostic_output,
             }
             return
 
@@ -416,13 +433,21 @@ class ConversationGraph:
             limit=12,
         )
         preferred = [candidate for candidate in candidates if candidate.source_type == "historical_case"]
-        ranked = self._rank_hypotheses(preferred or candidates, 3)
-
-        if not ranked:
+        if not preferred:
             faqs = self._list_active_faqs(state["model"])
             match = self._faq_match(state["model"] or "", state["user_message"], faqs)
             if match:
-                state["assistant_message"] = f"FAQ encontrada: {match.item.answer}"
+                diagnostic_output = self._build_diagnostic_output(
+                    primary=match.item.answer,
+                    alternatives=[],
+                    next_check="Aplicar la recomendacion de la FAQ y validar el resultado.",
+                    short_explanation=f"FAQ: {match.item.question}",
+                    confidence=max(0.25, min(match.score, 1.0)),
+                )
+                state["assistant_message"] = (
+                    f"FAQ encontrada: {match.item.answer} "
+                    "¿Te ha sido util este resultado? Puedes responder desde feedback."
+                )
                 state["confidence"] = max(0.25, min(match.score, 1.0))
                 state["decision_output"] = {
                     "route": "free_text_parser",
@@ -435,8 +460,10 @@ class ConversationGraph:
                     "symptom_category": parsed.symptom_category,
                     "reasoning_short": parsed.reasoning_short,
                     "parser_source": parsed.parser_source,
+                    "diagnostic_output": diagnostic_output,
                 }
                 return
+        ranked = self._rank_hypotheses(preferred or candidates, 3)
 
         if ranked:
             primary = ranked[0].diagnosis
@@ -471,7 +498,10 @@ class ConversationGraph:
             }
             return
 
-        state["assistant_message"] = "Describe el problema con mas detalle para analizarlo en la via Otros."
+        state["assistant_message"] = (
+            "No tengo suficientes casos para darte una hipotesis fiable. "
+            "Prueba a dar mas detalles o vuelve al menu para usar FAQ/Arbol."
+        )
         state["confidence"] = 0.2
         state["decision_output"] = {
             "route": "free_text_parser",

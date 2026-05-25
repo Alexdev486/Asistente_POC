@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     environment: str = "local"
     api_prefix: str = "/api/v1"
     log_level: str = "INFO"
+    cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/asistente_poc"
     pgvector_dim: int = 1024
@@ -25,4 +26,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

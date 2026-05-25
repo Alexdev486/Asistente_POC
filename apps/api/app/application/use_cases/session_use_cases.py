@@ -261,6 +261,15 @@ class SessionUseCases:
                 asked_questions.append(node_id)
         state_json["asked_questions"] = asked_questions
 
+        facts = state_json.get("facts")
+        if not isinstance(facts, dict):
+            facts = {}
+        answered_node = decision_output.get("answered_node")
+        answer = decision_output.get("answer")
+        if answered_node and answer:
+            facts[str(answered_node)] = str(answer).strip().lower()
+        state_json["facts"] = facts
+
         diagnostic_output = decision_output.get("diagnostic_output")
         if isinstance(diagnostic_output, dict):
             hypothesis = {
