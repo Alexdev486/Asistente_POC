@@ -180,6 +180,56 @@ class KnowledgeRepository:
     def _to_vector_literal(values: list[float]) -> str:
         return "[" + ",".join(f"{value:.6f}" for value in values) + "]"
 
+    def build_symptom_taxonomy(self, model: str | None) -> dict[str, list[str]]:
+        """Build taxonomy of symptom categories from trees, FAQs, and historical cases."""
+        taxonomy: dict[str, list[str]] = {
+            "tree_symptoms": [],
+            "faq_categories": [],
+            "case_categories": [],
+        }
+        with db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Get tree symptoms
+            cur.execute(
+                """
+                SELECT DISTINCT symptom
+                FROM diagnostic_trees
+                WHERE active IS TRUE
+                  AND (%s IS NULL OR model = %s OR model IS NULL)
+                ORDER BY symptom
+                """,
+                (model, model),
+            )
+            taxonomy["tree_symptoms"] = [row["symptom"] for row in cur.fetchall()]
+
+            # Get FAQ categories
+            cur.execute(
+                """
+                SELECT DISTINCT category
+                FROM faqs
+                WHERE active IS TRUE
+                  AND category IS NOT NULL
+                  AND (%s IS NULL OR model = %s OR model IS NULL)
+                ORDER BY category
+                """,
+                (model, model),
+            )
+            taxonomy["faq_categories"] = [row["category"] for row in cur.fetchall()]
+
+            # Get historical case symptom categories
+            cur.execute(
+                """
+                SELECT DISTINCT symptom_category
+                FROM historical_cases
+                WHERE symptom_category IS NOT NULL
+                  AND (%s IS NULL OR model = %s)
+                ORDER BY symptom_category
+                """,
+                (model, model),
+            )
+            taxonomy["case_categories"] = [row["symptom_category"] for row in cur.fetchall()]
+
+        return taxonomy
+
     @staticmethod
     def _extract_diagnosis(source_type: str | None, text_chunk: str) -> str:
         if source_type == "historical_case":

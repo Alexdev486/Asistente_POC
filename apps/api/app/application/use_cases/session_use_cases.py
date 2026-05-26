@@ -9,6 +9,7 @@ from app.infrastructure.db.repositories import (
     MessageRepository,
     SessionRepository,
 )
+from app.infrastructure.db.sync_connection import db_connection
 from app.infrastructure.llm.gateway import LLMGateway
 from app.infrastructure.llm.providers.groq import GroqProvider
 from app.infrastructure.llm.providers.openrouter import OpenRouterProvider
@@ -84,9 +85,23 @@ class SessionUseCases:
         return response
 
     def process_message(self, payload: SessionMessageRequest) -> SessionMessageResponse:
+        with db_connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_lock(hashtext(%s))", (str(payload.session_id),))
+            try:
+                return self._process_message_locked(payload)
+            finally:
+                cur.execute("SELECT pg_advisory_unlock(hashtext(%s))", (str(payload.session_id),))
+
+    def _process_message_locked(self, payload: SessionMessageRequest) -> SessionMessageResponse:
         persisted = self._session_repository.get_session(payload.session_id)
         if persisted is None:
             raise KeyError(f"Sesion no encontrada: {payload.session_id}")
+
+        # Build taxonomy for the model if available
+        model = persisted.model
+        if model:
+            taxonomy = self._knowledge_repository.build_symptom_taxonomy(model)
+            self._free_text_parser._taxonomy = taxonomy
 
         steps = persisted.steps + 1
         user_message = payload.message.strip()
@@ -193,12 +208,35 @@ class SessionUseCases:
         )
 
     def _save_additional_logs(self, session_id: UUID, decision_output: dict[str, Any]) -> None:
+        # Log free_text_parser observability
+        if "parser_source" in decision_output:
+            parser_output = {
+                "parser_source": decision_output.get("parser_source"),
+                "tags": decision_output.get("tags", []),
+                "symptom_category": decision_output.get("symptom_category"),
+                "reasoning_short": decision_output.get("reasoning_short"),
+            }
+            self._save_decision_log(
+                session_id=session_id,
+                module_name="free_text_parser",
+                input_data={"raw_text": decision_output.get("result") or "free_text_input"},
+                output_data=parser_output,
+                confidence=decision_output.get("top_score") or 0.5,
+            )
+        
         if "sources" in decision_output:
+            retrieval_output = {
+                "sources": decision_output.get("sources", []),
+                "scores": {
+                    "top_score": decision_output.get("top_score"),
+                    "threshold": decision_output.get("threshold", 0.35),
+                },
+            }
             self._save_decision_log(
                 session_id=session_id,
                 module_name="historical_retrieval",
-                input_data={"sources": decision_output.get("sources", [])},
-                output_data={"result": "retrieved_candidates"},
+                input_data={"symptom_category": decision_output.get("symptom_category")},
+                output_data=retrieval_output,
                 confidence=decision_output.get("top_score"),
             )
         if "top_hypotheses" in decision_output:
@@ -255,19 +293,23 @@ class SessionUseCases:
         if not isinstance(asked_questions, list):
             asked_questions = []
 
-        if decision_output.get("result") == "question" and decision_output.get("current_node"):
+        result = decision_output.get("result")
+        if result == "question" and decision_output.get("current_node"):
             node_id = str(decision_output["current_node"])
-            if node_id not in asked_questions:
-                asked_questions.append(node_id)
+            symptom = decision_output.get("current_symptom")
+            key = f"{symptom}:{node_id}" if symptom else node_id
+            if key not in asked_questions:
+                asked_questions.append(key)
         state_json["asked_questions"] = asked_questions
 
         facts = state_json.get("facts")
         if not isinstance(facts, dict):
             facts = {}
-        answered_node = decision_output.get("answered_node")
-        answer = decision_output.get("answer")
-        if answered_node and answer:
-            facts[str(answered_node)] = str(answer).strip().lower()
+        if result in {"question", "diagnosis"}:
+            answered_node = decision_output.get("answered_node")
+            answer = decision_output.get("answer")
+            if answered_node and answer:
+                facts[str(answered_node)] = str(answer).strip().lower()
         state_json["facts"] = facts
 
         diagnostic_output = decision_output.get("diagnostic_output")
@@ -277,6 +319,8 @@ class SessionUseCases:
                 "score": diagnostic_output.get("confidence"),
             }
             state_json["active_hypotheses"] = [hypothesis]
+        elif "active_hypotheses" in state_json:
+            state_json["active_hypotheses"] = []
 
     @staticmethod
     def _extract_final_result(decision_output: dict[str, Any]) -> str | None:

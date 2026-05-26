@@ -126,14 +126,18 @@ class ConversationGraph:
     @staticmethod
     def _route_turn(state: ConversationState) -> Route:
         msg = state["normalized_message"]
+        
+        # Normalize menu command
+        normalized_cmd = ConversationGraph._normalize_menu_command(msg)
+        
         if not state["vin"]:
             return "vin_lookup"
 
-        if msg in {"sintomas frecuentes", "sintoma", "sintomas"}:
+        if normalized_cmd == "tree":
             return "tree_engine"
-        if msg in {"consultas frecuentes", "faq", "faqs"}:
+        if normalized_cmd == "faq":
             return "faq_matcher"
-        if msg in {"otros", "otra consulta", "texto libre"}:
+        if normalized_cmd == "other":
             return "free_text_parser"
 
         if state["entry_point"] == "faq":
@@ -143,7 +147,28 @@ class ConversationGraph:
         if state["entry_point"] == "other":
             return "free_text_parser"
 
+        if not state["entry_point"] and msg:
+            return "free_text_parser"
+
         return "out_of_scope"
+
+    @staticmethod
+    def _normalize_menu_command(msg: str) -> str | None:
+        """Normalize menu commands, handling typos and variations."""
+        msg = msg.strip().lower()
+        # Tree command variants
+        tree_variants = {"sintomas frecuentes", "sintoma", "sintomas", "arbol", "symptom", "symptoms"}
+        if msg in tree_variants or "sintom" in msg[:6]:
+            return "tree"
+        # FAQ command variants
+        faq_variants = {"consultas frecuentes", "faq", "faqs", "preguntas", "consulta"}
+        if msg in faq_variants or "faq" in msg or "consulta" in msg:
+            return "faq"
+        # Other command variants
+        other_variants = {"otros", "otra consulta", "texto libre", "otro", "libre", "custom"}
+        if msg in other_variants or "otro" in msg or "libre" in msg:
+            return "other"
+        return None
 
     def _node_vin_lookup(self, state: ConversationState) -> None:
         vehicle = self._resolve_vin(state["user_message"])
@@ -164,6 +189,13 @@ class ConversationGraph:
 
     def _node_tree_engine(self, state: ConversationState) -> None:
         state["entry_point"] = "tree"
+        normalized_cmd = self._normalize_menu_command(state["normalized_message"])
+        
+        if state["current_node"] or state["current_symptom"]:
+            if normalized_cmd in ("faq", "other"):
+                state["state_updates"]["current_node"] = None
+                state["state_updates"]["current_symptom"] = None
+        
         symptoms = self._list_active_tree_symptoms(state["model"])
         normalized_symptoms = {s.lower(): s for s in symptoms}
 
@@ -198,7 +230,8 @@ class ConversationGraph:
             if step.node_type == "question":
                 node_answers = tree_json["nodes"][step.node_id].get("answers", {})
                 options = ", ".join(node_answers.keys()) if node_answers else "si/no"
-                if step.node_id in state["asked_questions"]:
+                question_key = self._question_key(state["current_symptom"], step.node_id)
+                if question_key in state["asked_questions"] or step.node_id in state["asked_questions"]:
                     state["assistant_message"] = (
                         "Ya hemos cubierto esa pregunta. "
                         "Si quieres, elige otro sintoma o cambia a FAQ/Otros."
@@ -300,7 +333,8 @@ class ConversationGraph:
         if step.node_type == "question":
             node_answers = tree_json["nodes"][step.node_id].get("answers", {})
             options = ", ".join(node_answers.keys()) if node_answers else "si/no"
-            if step.node_id in state["asked_questions"]:
+            question_key = self._question_key(selected_symptom, step.node_id)
+            if question_key in state["asked_questions"] or step.node_id in state["asked_questions"]:
                 state["assistant_message"] = (
                     "Ya hemos cubierto esa pregunta. "
                     "Elige otro sintoma o cambia a FAQ/Otros."
@@ -353,7 +387,29 @@ class ConversationGraph:
 
     def _node_faq_matcher(self, state: ConversationState) -> None:
         state["entry_point"] = "faq"
+        normalized_cmd = self._normalize_menu_command(state["normalized_message"])
+        
+        if state["current_node"] or state["current_symptom"]:
+            if normalized_cmd in ("tree", "other"):
+                state["state_updates"]["current_node"] = None
+                state["state_updates"]["current_symptom"] = None
+        
         faqs = self._list_active_faqs(state["model"])
+        if state["normalized_message"] in {"consultas frecuentes", "faq", "faqs"}:
+            suggested_list = [item.question for item in faqs[:3]]
+            suggested = ", ".join(suggested_list) if suggested_list else "sin FAQs activas"
+            state["assistant_message"] = (
+                "Vamos por Consultas frecuentes. "
+                f"Puedes escribir una pregunta como: {suggested}."
+            )
+            state["confidence"] = 0.6
+            state["decision_output"] = {
+                "route": "faq_matcher",
+                "entry_point": "faq",
+                "result": "faq_suggestions",
+                "suggestions": suggested_list,
+            }
+            return
         match = self._faq_match(state["model"] or "", state["user_message"], faqs)
 
         if match:
@@ -395,6 +451,13 @@ class ConversationGraph:
 
     def _node_free_text_parser(self, state: ConversationState) -> None:
         state["entry_point"] = "other"
+        normalized_cmd = self._normalize_menu_command(state["normalized_message"])
+        
+        if state["current_node"] or state["current_symptom"]:
+            if normalized_cmd in ("tree", "faq"):
+                state["state_updates"]["current_node"] = None
+                state["state_updates"]["current_symptom"] = None
+        
         if state["normalized_message"] in {"otros", "otra consulta", "texto libre"}:
             state["assistant_message"] = "Describe el problema con tus palabras para analizarlo en la via Otros."
             state["confidence"] = 0.2
@@ -432,7 +495,14 @@ class ConversationGraph:
             symptom=parsed.symptom_category,
             limit=12,
         )
-        preferred = [candidate for candidate in candidates if candidate.source_type == "historical_case"]
+        # Guardrails: filter out weak candidates (vector similarity too low)
+        min_score_threshold = 0.25
+        filtered_candidates = [
+            c for c in candidates
+            if c.vector_score >= min_score_threshold or c.lexical_score >= min_score_threshold
+        ]
+        
+        preferred = [candidate for candidate in filtered_candidates if candidate.source_type == "historical_case"]
         if not preferred:
             faqs = self._list_active_faqs(state["model"])
             match = self._faq_match(state["model"] or "", state["user_message"], faqs)
@@ -463,14 +533,16 @@ class ConversationGraph:
                     "diagnostic_output": diagnostic_output,
                 }
                 return
-        ranked = self._rank_hypotheses(preferred or candidates, 3)
+        ranked = self._rank_hypotheses(preferred or filtered_candidates, 3)
 
-        if ranked:
+        # Guardrails: require minimum confidence and sufficient evidence
+        min_confidence_threshold = 0.35
+        if ranked and ranked[0].score >= min_confidence_threshold:
             primary = ranked[0].diagnosis
             alternatives = ", ".join(h.diagnosis for h in ranked[1:]) or "sin alternativas"
             sources = [
                 {"source_type": c.source_type, "source_id": c.source_id}
-                for c in (preferred or candidates)[:3]
+                for c in (preferred or filtered_candidates)[:3]
             ]
             diagnostic_output = self._build_diagnostic_output(
                 primary=primary,
@@ -498,19 +570,35 @@ class ConversationGraph:
             }
             return
 
+        # Guardrail: insufficient confidence
+        has_candidates = len(candidates) > 0
+        has_category = parsed.symptom_category is not None
+        
+        if has_candidates and has_category and ranked:
+            # Weak match but has category
+            reason = f"Confianza baja ({ranked[0].score:.2f}) para la categoria '{parsed.symptom_category}'."
+        elif has_candidates and not has_category:
+            # Candidates but no clear category
+            reason = "No pude clasificar el sintoma en un arbol conocido."
+        else:
+            reason = "No hay casos similares en la base de datos para este sintoma."
+
         state["assistant_message"] = (
-            "No tengo suficientes casos para darte una hipotesis fiable. "
+            f"No tengo suficientes casos para darte una hipotesis fiable. {reason} "
             "Prueba a dar mas detalles o vuelve al menu para usar FAQ/Arbol."
         )
         state["confidence"] = 0.2
         state["decision_output"] = {
             "route": "free_text_parser",
             "entry_point": "other",
-            "result": "no_candidates",
+            "result": "weak_evidence",
             "tags": parsed.tags,
             "symptom_category": parsed.symptom_category,
             "reasoning_short": parsed.reasoning_short,
             "parser_source": parsed.parser_source,
+            "threshold": min_confidence_threshold,
+            "top_score": ranked[0].score if ranked else 0.0,
+            "reason": reason,
         }
 
     @staticmethod
@@ -544,3 +632,9 @@ class ConversationGraph:
             "short_explanation": short_explanation,
             "confidence": max(0.0, min(confidence, 1.0)),
         }
+
+    @staticmethod
+    def _question_key(symptom: str | None, node_id: str) -> str:
+        if symptom:
+            return f"{symptom}:{node_id}"
+        return node_id

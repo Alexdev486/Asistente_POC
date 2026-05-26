@@ -19,9 +19,10 @@ class ParsedFreeText:
 
 
 class FreeTextParserService:
-    def __init__(self, llm_gateway: LLMGateway | None = None) -> None:
+    def __init__(self, llm_gateway: LLMGateway | None = None, taxonomy: dict[str, list[str]] | None = None) -> None:
         self._llm_gateway = llm_gateway
         self._system_prompt = self._load_system_prompt()
+        self._taxonomy = taxonomy or {}
 
     def parse(self, text: str) -> ParsedFreeText:
         normalized = self._normalize(text)
@@ -47,15 +48,18 @@ class FreeTextParserService:
         )
 
     def _parse_with_llm(self, raw_text: str, normalized: str) -> ParsedFreeText:
+        taxonomy_str = self._build_taxonomy_prompt()
         llm_prompt = (
             "Texto del usuario:\n"
             f"{raw_text}\n\n"
+            f"{taxonomy_str}\n"
             "Devuelve exclusivamente un JSON con campos:\n"
             "{\n"
             '  "tags": ["tag1","tag2"],\n'
-            '  "symptom_category": "Paradas de motor" | "Testigo CELP encendido" | null,\n'
+            '  "symptom_category": <una de las categorias arriba, o null si no aplica>,\n'
             '  "reasoning_short": "razon breve"\n'
             "}\n"
+            "Importante: symptom_category SOLO puede ser null o una de las categorias listadas."
         )
         raw = self._llm_gateway.complete(prompt=llm_prompt, system_prompt=self._system_prompt)
         data = self._extract_json(raw)
@@ -66,6 +70,9 @@ class FreeTextParserService:
         symptom_category = data.get("symptom_category")
         if symptom_category is not None:
             symptom_category = str(symptom_category).strip() or None
+            # Validate category is in taxonomy
+            if not self._is_valid_category(symptom_category):
+                symptom_category = None
         reasoning_short = str(data.get("reasoning_short", "")).strip() or "Clasificacion por LLM."
         return ParsedFreeText(
             normalized_text=normalized,
@@ -78,6 +85,9 @@ class FreeTextParserService:
     def _parse_with_rules(self, normalized: str) -> ParsedFreeText:
         tags = self._infer_tags(normalized)
         symptom_category = self._infer_category(tags)
+        # Validate category is in taxonomy
+        if symptom_category and not self._is_valid_category(symptom_category):
+            symptom_category = None
         return ParsedFreeText(
             normalized_text=normalized,
             tags=tags,
@@ -85,6 +95,35 @@ class FreeTextParserService:
             reasoning_short="Clasificacion por reglas locales.",
             parser_source="rules",
         )
+
+    def _is_valid_category(self, category: str) -> bool:
+        """Check if category exists in taxonomy."""
+        if not category:
+            return False
+        all_categories = (
+            self._taxonomy.get("tree_symptoms", []) +
+            self._taxonomy.get("faq_categories", []) +
+            self._taxonomy.get("case_categories", [])
+        )
+        # Normalize for comparison
+        category_lower = category.lower().strip()
+        for valid in all_categories:
+            if valid and valid.lower().strip() == category_lower:
+                return True
+        return False
+
+    def _build_taxonomy_prompt(self) -> str:
+        """Build taxonomy info for LLM prompt."""
+        all_categories = (
+            self._taxonomy.get("tree_symptoms", []) +
+            self._taxonomy.get("faq_categories", []) +
+            self._taxonomy.get("case_categories", [])
+        )
+        unique_categories = sorted(set(all_categories))
+        if not unique_categories:
+            return "Categorias disponibles: ninguna (usa null para symptom_category)."
+        categories_str = ", ".join(unique_categories)
+        return f"Categorias de sintoma disponibles: {categories_str}."
 
     def _infer_tags(self, text: str) -> list[str]:
         keywords = [

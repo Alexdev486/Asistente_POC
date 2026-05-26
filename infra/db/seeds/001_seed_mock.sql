@@ -49,6 +49,33 @@ VALUES
         'En esta POC, ese patron es compatible con reglaje de valvulas pisado y perdida de compresion en caliente.',
         0,
         TRUE
+    ),
+    (
+        5,
+        'Xciting 400',
+        'Embrague',
+        'Por que suena un ruido al accionar el embrague?',
+        'En esta POC se asocia a falta de lubricacion en el cable, desgaste del rodamiento o juego excesivo en el accionamiento.',
+        0,
+        TRUE
+    ),
+    (
+        6,
+        'Xciting 400',
+        'Arranque',
+        'Se apaga al arrancar en frio, que revisar primero?',
+        'En esta POC se recomienda comprobar ralenti, limpieza de cuerpo de mariposa y estado de la bateria.',
+        0,
+        TRUE
+    ),
+    (
+        7,
+        'Xciting 400',
+        'Paradas de motor',
+        'Se apaga al arrancar y luego se estabiliza, que indica?',
+        'En esta POC apunta a ralenti bajo o mezcla pobre; revisar admision y sistema de combustible.',
+        0,
+        TRUE
     )
 ON CONFLICT (faq_id) DO UPDATE
 SET
@@ -109,6 +136,30 @@ VALUES
         'La moto se para de forma intermitente pero a veces rearranca sin necesidad de quitar contacto.',
         'Mal contacto en pipa de bujia',
         0.7000
+    ),
+    (
+        'CASE-XC-001',
+        'Xciting 400',
+        'Ruido al embrague',
+        'Al accionar el embrague se percibe un chirrido continuo y tacto duro en la maneta.',
+        'Cable de embrague seco o desajustado',
+        0.7800
+    ),
+    (
+        'CASE-XC-002',
+        'Xciting 400',
+        'Paradas de motor',
+        'En frio arranca, pero se apaga al soltar gas. En caliente funciona mejor.',
+        'Ralenti bajo o cuerpo de mariposa sucio',
+        0.8200
+    ),
+    (
+        'CASE-XC-003',
+        'Xciting 400',
+        'Paradas de motor',
+        'Tras repostar, el motor se ahoga y se apaga al poco de salir.',
+        'Combustible contaminado o filtro obstruido',
+        0.7600
     )
 ON CONFLICT (case_id) DO UPDATE
 SET
@@ -162,6 +213,40 @@ VALUES
                 },
                 "c4": {"type": "diagnosis", "result": "Posible fallo de alimentacion o gestion electronica del combustible"},
                 "c5": {"type": "diagnosis", "result": "Revisar lectura de codigos y comprobaciones electricas basicas"}
+            }
+        }'::jsonb,
+        TRUE
+    ),
+    (
+        'XCITING_PARADAS_V1',
+        'Xciting 400',
+        'Paradas de motor',
+        1,
+        '{
+            "start_node": "p1",
+            "nodes": {
+                "p1": {"type":"question","text":"El fallo aparece solo en frio?","answers":{"si":"p2","no":"p3"}},
+                "p2": {"type":"diagnosis","result":"Ralenti bajo o cuerpo de mariposa sucio"},
+                "p3": {"type":"question","text":"Ocurre tras repostar recientemente?","answers":{"si":"p4","no":"p5"}},
+                "p4": {"type":"diagnosis","result":"Combustible contaminado o filtro obstruido"},
+                "p5": {"type":"diagnosis","result":"Revisar bateria y sistema de carga"}
+            }
+        }'::jsonb,
+        TRUE
+    ),
+    (
+        'XCITING_EMBRAGUE_V1',
+        'Xciting 400',
+        'Ruido al embrague',
+        1,
+        '{
+            "start_node": "e1",
+            "nodes": {
+                "e1": {"type":"question","text":"El ruido aparece al accionar la maneta?","answers":{"si":"e2","no":"e3"}},
+                "e2": {"type":"question","text":"La maneta se siente dura o el cable va seco?","answers":{"si":"e4","no":"e5"}},
+                "e4": {"type":"diagnosis","result":"Cable de embrague seco o desajustado"},
+                "e5": {"type":"diagnosis","result":"Rodamiento/accionamiento de embrague con holgura"},
+                "e3": {"type":"diagnosis","result":"Revisar transmision final o tapa de embrague"}
             }
         }'::jsonb,
         TRUE

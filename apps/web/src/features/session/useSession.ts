@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { sendMessage, startSession } from "@/lib/api/client";
+import { getSession, sendMessage, startSession } from "@/lib/api/client";
 import type { SessionMessageResponse, SessionState } from "@/types/session";
 
 export type ChatMessage = {
@@ -14,8 +14,34 @@ export function useSession() {
   const [state, setState] = useState<SessionState | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const storageKey = "asistente.sessionId";
 
   const initialized = useMemo(() => Boolean(sessionId), [sessionId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || sessionId) {
+      return;
+    }
+    const stored = window.localStorage.getItem(storageKey);
+    if (!stored) {
+      return;
+    }
+    setIsSending(true);
+    setError(null);
+    getSession(stored)
+      .then((result) => {
+        setSessionId(result.session_id);
+        setState(result.state);
+        setMessages([{ role: "system", text: "Sesion reanudada." }]);
+      })
+      .catch((err) => {
+        window.localStorage.removeItem(storageKey);
+        setError(err instanceof Error ? err.message : "No se pudo recuperar la sesion.");
+      })
+      .finally(() => {
+        setIsSending(false);
+      });
+  }, [sessionId]);
 
   async function initSession() {
     setIsSending(true);
@@ -23,6 +49,9 @@ export function useSession() {
     try {
       const result = await startSession();
       setSessionId(result.session_id);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(storageKey, result.session_id);
+      }
       setMessages([{ role: "assistant", text: result.message }]);
       setState(null);
     } catch (err) {
