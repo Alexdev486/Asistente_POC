@@ -1,4 +1,4 @@
-.PHONY: db-up db-down db-migrate db-seed db-ingest-chunks embeddings-worker qa api-install api-run web-install web-run
+.PHONY: db-up db-down db-migrate db-seed db-ingest-chunks embeddings-worker qa api-install api-run api-stop web-install web-run web-stop
 
 db-up:
 	docker compose -f infra/docker/docker-compose.yml up -d
@@ -27,8 +27,14 @@ api-install:
 api-run:
 	bash scripts/dev/run_api.sh
 
+api-stop:
+	bash scripts/dev/stop_api.sh
+
 web-install:
 	cd apps/web && npm install
 
 web-run:
 	bash scripts/dev/run_web.sh
+
+web-stop:
+	bash scripts/dev/stop_web.sh

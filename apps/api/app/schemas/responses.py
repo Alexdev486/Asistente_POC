@@ -11,6 +11,7 @@ class SessionStateResponse(BaseModel):
     model: str | None = None
     current_symptom: str | None = None
     current_node: str | None = None
+    photo_url: str | None = None
 
 
 class StartSessionResponse(BaseModel):
@@ -23,6 +24,7 @@ class SessionMessageResponse(BaseModel):
     message: str
     state: SessionStateResponse | None = None
     diagnostic_output: DiagnosticOutputResponse | None = None
+    quick_replies: list[str] | None = None
 
 
 class SessionDetailResponse(BaseModel):
@@ -51,6 +53,18 @@ class MetricsSummaryResponse(BaseModel):
     positive_feedback: int
     negative_feedback: int
     most_frequent_final_result: str | None = None
+
+
+class MessageResponse(BaseModel):
+    message_id: int
+    role: str
+    content: str
+    created_at: str | None = None
+
+
+class MessagesListResponse(BaseModel):
+    session_id: UUID
+    messages: list[MessageResponse]
 
 
 class DiagnosticOutputResponse(BaseModel):

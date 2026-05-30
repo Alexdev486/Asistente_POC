@@ -1,7 +1,11 @@
+import logging
+import time
 from typing import Any
 from uuid import UUID, uuid4
 
-from app.application.orchestrator.langgraph_flow import ConversationGraph, ConversationSnapshot
+from app.application.orchestrator.langgraph_flow import ConversationGraph, ConversationSnapshot, _model_photo_url
+
+logger = logging.getLogger(__name__)
 from app.infrastructure.db.repositories import (
     DecisionLogRepository,
     FeedbackRepository,
@@ -93,15 +97,18 @@ class SessionUseCases:
                 cur.execute("SELECT pg_advisory_unlock(hashtext(%s))", (str(payload.session_id),))
 
     def _process_message_locked(self, payload: SessionMessageRequest) -> SessionMessageResponse:
+        _start = time.monotonic()
+        turn_id = str(uuid4())
         persisted = self._session_repository.get_session(payload.session_id)
         if persisted is None:
+            logger.error("Session not found", extra={"session_id": str(payload.session_id), "turn_id": turn_id})
             raise KeyError(f"Sesion no encontrada: {payload.session_id}")
 
         # Build taxonomy for the model if available
-        model = persisted.model
+        model = persisted.state.model
         if model:
             taxonomy = self._knowledge_repository.build_symptom_taxonomy(model)
-            self._free_text_parser._taxonomy = taxonomy
+            self._free_text_parser.set_taxonomy(taxonomy)
 
         steps = persisted.steps + 1
         user_message = payload.message.strip()
@@ -124,6 +131,9 @@ class SessionUseCases:
         )
         persisted.entry_point = graph_result.entry_point
         self._apply_state_updates(persisted.state, graph_result.state_updates)
+        # Asegurar photo_url siempre que haya modelo (incluso en turnos posteriores al VIN)
+        if persisted.state.photo_url is None and persisted.state.model:
+            persisted.state.photo_url = _model_photo_url(persisted.state.model)
         self._merge_orchestration_state(
             persisted.state_json,
             route=graph_result.route,
@@ -143,23 +153,36 @@ class SessionUseCases:
             self._session_repository.set_final_result(payload.session_id, final_result)
         self._save_decision_log(
             session_id=payload.session_id,
+            turn_id=turn_id,
             module_name=graph_result.route,
             input_data={"message": user_message},
             output_data=graph_result.decision_output,
             confidence=graph_result.confidence,
         )
-        self._save_additional_logs(payload.session_id, graph_result.decision_output)
+        self._save_additional_logs(payload.session_id, graph_result.decision_output, turn_id=turn_id)
         self._message_repository.save_message(payload.session_id, "assistant", graph_result.assistant_message)
+        _elapsed = time.monotonic() - _start
+        logger.info(
+            "Message processed",
+            extra={
+                "session_id": str(payload.session_id),
+                "route": graph_result.route,
+                "elapsed_ms": round(_elapsed * 1000, 1),
+                "steps": steps,
+            },
+        )
         return SessionMessageResponse(
             session_id=payload.session_id,
             message=graph_result.assistant_message,
             state=persisted.state,
             diagnostic_output=graph_result.decision_output.get("diagnostic_output"),
+            quick_replies=graph_result.quick_replies,
         )
 
     def get_session(self, session_id: UUID) -> SessionDetailResponse:
         persisted = self._session_repository.get_session(session_id)
         if persisted is None:
+            logger.error("Session not found on get", extra={"session_id": str(session_id)})
             raise KeyError(f"Sesion no encontrada: {session_id}")
         return SessionDetailResponse(
             session_id=persisted.session_id,
@@ -170,9 +193,17 @@ class SessionUseCases:
             state_json=persisted.state_json,
         )
 
+    def get_session_messages(self, session_id: UUID) -> list[dict]:
+        persisted = self._session_repository.get_session(session_id)
+        if persisted is None:
+            logger.error("Session not found on get_messages", extra={"session_id": str(session_id)})
+            raise KeyError(f"Sesion no encontrada: {session_id}")
+        return self._message_repository.get_session_messages(session_id)
+
     def save_feedback(self, session_id: UUID, payload: SessionFeedbackRequest) -> FeedbackResponse:
         persisted = self._session_repository.get_session(session_id)
         if persisted is None:
+            logger.error("Session not found on feedback", extra={"session_id": str(session_id)})
             raise KeyError(f"Sesion no encontrada: {session_id}")
         self._feedback_repository.save_feedback(session_id, payload.useful, payload.comment)
         self._session_repository.complete_session(session_id)
@@ -194,20 +225,26 @@ class SessionUseCases:
         self,
         *,
         session_id: UUID,
+        turn_id: str | None = None,
         module_name: str,
         input_data: dict[str, Any],
         output_data: dict[str, Any],
         confidence: float | None,
     ) -> None:
+        _input_data = dict(input_data)
+        _output_data = dict(output_data)
+        if turn_id:
+            _input_data["turn_id"] = turn_id
+            _output_data["turn_id"] = turn_id
         self._decision_log_repository.save_log(
             session_id=session_id,
             module_name=module_name,
-            input_data=input_data,
-            output_data=output_data,
+            input_data=_input_data,
+            output_data=_output_data,
             confidence=confidence,
         )
 
-    def _save_additional_logs(self, session_id: UUID, decision_output: dict[str, Any]) -> None:
+    def _save_additional_logs(self, session_id: UUID, decision_output: dict[str, Any], turn_id: str | None = None) -> None:
         # Log free_text_parser observability
         if "parser_source" in decision_output:
             parser_output = {
@@ -218,6 +255,7 @@ class SessionUseCases:
             }
             self._save_decision_log(
                 session_id=session_id,
+                turn_id=turn_id,
                 module_name="free_text_parser",
                 input_data={"raw_text": decision_output.get("result") or "free_text_input"},
                 output_data=parser_output,
@@ -234,6 +272,7 @@ class SessionUseCases:
             }
             self._save_decision_log(
                 session_id=session_id,
+                turn_id=turn_id,
                 module_name="historical_retrieval",
                 input_data={"symptom_category": decision_output.get("symptom_category")},
                 output_data=retrieval_output,
@@ -242,6 +281,7 @@ class SessionUseCases:
         if "top_hypotheses" in decision_output:
             self._save_decision_log(
                 session_id=session_id,
+                turn_id=turn_id,
                 module_name="hybrid_ranking",
                 input_data={"top_hypotheses": decision_output.get("top_hypotheses", [])},
                 output_data={"top_score": decision_output.get("top_score")},
@@ -250,6 +290,7 @@ class SessionUseCases:
         if "diagnostic_output" in decision_output:
             self._save_decision_log(
                 session_id=session_id,
+                turn_id=turn_id,
                 module_name="response_builder",
                 input_data={"source": decision_output.get("route")},
                 output_data=decision_output.get("diagnostic_output", {}),
@@ -266,6 +307,8 @@ class SessionUseCases:
             state.current_symptom = updates["current_symptom"]
         if "current_node" in updates:
             state.current_node = updates["current_node"]
+        if "photo_url" in updates:
+            state.photo_url = updates["photo_url"]
 
     @staticmethod
     def _merge_orchestration_state(
@@ -321,6 +364,12 @@ class SessionUseCases:
             state_json["active_hypotheses"] = [hypothesis]
         elif "active_hypotheses" in state_json:
             state_json["active_hypotheses"] = []
+
+        # Persist tags from free_text_parser parsing
+        tags = decision_output.get("tags")
+        if isinstance(tags, list):
+            state_json["last_tags"] = tags
+            state_json["last_parser_source"] = decision_output.get("parser_source")
 
     @staticmethod
     def _extract_final_result(decision_output: dict[str, Any]) -> str | None:

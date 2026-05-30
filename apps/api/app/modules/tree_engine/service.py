@@ -1,6 +1,21 @@
 from dataclasses import dataclass
 from typing import Any
 
+# Synonym map for tree navigation answers.
+_ANSWER_SYNONYMS: dict[str, list[str]] = {
+    "si": ["si", "sí", "s", "yes", "vale", "ok", "okay", "claro", "correcto", "afirmativo"],
+    "no": ["no", "n", "nope", "nunca", "tampoco", "negativo", "nada"],
+}
+
+
+def _normalize_tree_answer(raw: str) -> str:
+    """Normalize a user answer for tree navigation with fuzzy matching."""
+    cleaned = raw.strip().lower()
+    for canonical, variants in _ANSWER_SYNONYMS.items():
+        if cleaned in variants:
+            return canonical
+    return cleaned
+
 
 @dataclass
 class TreeStepResult:
@@ -17,7 +32,7 @@ class DiagnosticTreeEngine:
 
     def advance(self, tree_json: dict[str, Any], current_node: str, answer: str) -> TreeStepResult:
         node = tree_json["nodes"][current_node]
-        normalized_answer = answer.strip().lower()
+        normalized_answer = _normalize_tree_answer(answer)
         next_node = node["answers"].get(normalized_answer)
         if not next_node:
             raise ValueError("Respuesta no valida para este nodo.")

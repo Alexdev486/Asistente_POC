@@ -3,6 +3,7 @@ export type SessionState = {
   model: string | null;
   current_symptom: string | null;
   current_node: string | null;
+  photo_url?: string | null;
 };
 
 export type StartSessionResponse = {
@@ -15,6 +16,7 @@ export type SessionMessageResponse = {
   message: string;
   state: SessionState | null;
   diagnostic_output?: DiagnosticOutput | null;
+  quick_replies?: string[] | null;
 };
 
 export type SessionDetailResponse = {
@@ -24,6 +26,18 @@ export type SessionDetailResponse = {
   steps: number;
   state: SessionState | null;
   state_json: Record<string, unknown>;
+};
+
+export type MessageItem = {
+  message_id: number;
+  role: string;
+  content: string;
+  created_at: string | null;
+};
+
+export type MessagesListResponse = {
+  session_id: string;
+  messages: MessageItem[];
 };
 
 export type DiagnosticOutput = {

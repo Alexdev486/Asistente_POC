@@ -1,0 +1,22 @@
+{
+  "name": "Asistente de Diagnóstico Inteligente",
+  "short_name": "Asistente POC",
+  "description": "Asistente conversacional para diagnóstico técnico de motocicletas.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0C0E",
+  "theme_color": "#3B82F6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/design/logoApp.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/design/logoApp.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

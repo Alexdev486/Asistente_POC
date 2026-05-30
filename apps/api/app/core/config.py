@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     groq_model: str = "llama-3.1-8b-instant"
     openrouter_api_key: str = ""
     openrouter_model: str = "meta-llama/llama-3.1-8b-instruct:free"
+    openrouter_embedding_model: str = "BAAI/bge-m3"
     request_timeout_seconds: int = Field(default=20, ge=1, le=120)
 
 

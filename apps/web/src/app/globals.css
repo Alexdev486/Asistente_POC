@@ -1,3 +1,5 @@
+@import "../styles/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,8 +11,159 @@
 
   body {
     margin: 0;
-    font-family: Inter, Arial, sans-serif;
-    background: #0f1115;
-    color: #f1f2f4;
+    font-family: var(--font-inter), var(--font-body), sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Force display font on headings */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-jakarta), var(--font-display), sans-serif;
+  }
+
+  /* Force mono font on code-like elements */
+  code, kbd, samp, pre, .font-mono-force {
+    font-family: var(--font-jetbrains), var(--font-mono), monospace;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-hover);
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(59, 130, 246, 0.3);
+    color: var(--text-primary);
+  }
+}
+
+@layer components {
+  .bg-shimmer {
+    background: var(--gradient-shimmer);
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  .bg-chat-gradient {
+    background: var(--gradient-chat-bg), var(--bg-primary);
+  }
+
+  .glass-card {
+    background: rgba(20, 22, 26, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-default);
+  }
+
+  .glass-card-hover {
+    transition: all var(--duration-normal) var(--ease-smooth);
+  }
+
+  .glass-card-hover:hover {
+    background: rgba(24, 26, 29, 0.8);
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-card);
+  }
+
+  .gradient-text {
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-border {
+    position: relative;
+  }
+
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--gradient-accent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+@layer utilities {
+  .animate-shimmer {
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  .animate-drift {
+    animation: drift 30s ease-in-out infinite alternate;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn var(--duration-normal) var(--ease-smooth) both;
+  }
+
+  .animate-slide-up {
+    animation: slideUp var(--duration-normal) var(--ease-spring) both;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn var(--duration-normal) var(--ease-spring) both;
+  }
+
+  .animate-pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-default) transparent;
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(2%, 1%) scale(1.02); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.1); }
+  50%      { box-shadow: 0 0 20px rgba(59, 130, 246, 0.25); }
 }

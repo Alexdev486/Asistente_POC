@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -7,6 +8,8 @@ import unicodedata
 import httpx
 
 from app.infrastructure.llm.gateway import LLMGateway
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,7 +32,8 @@ class FreeTextParserService:
         if self._llm_gateway is not None:
             try:
                 return self._parse_with_llm(text, normalized)
-            except (RuntimeError, httpx.HTTPError, json.JSONDecodeError, ValueError):
+            except (RuntimeError, httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
+                logger.warning("Free text LLM parse failed, using rules fallback", exc_info=True, extra={"error": str(exc), "text_snippet": text[:100]})
                 parsed_rules = self._parse_with_rules(normalized)
                 return ParsedFreeText(
                     normalized_text=parsed_rules.normalized_text,
@@ -95,6 +99,9 @@ class FreeTextParserService:
             reasoning_short="Clasificacion por reglas locales.",
             parser_source="rules",
         )
+
+    def set_taxonomy(self, taxonomy: dict[str, list[str]]) -> None:
+        self._taxonomy = taxonomy
 
     def _is_valid_category(self, category: str) -> bool:
         """Check if category exists in taxonomy."""
@@ -168,5 +175,5 @@ class FreeTextParserService:
         text = text.lower()
         text = unicodedata.normalize("NFKD", text)
         text = "".join(c for c in text if not unicodedata.combining(c))
-        text = re.sub(r"[^a-z0-9\\s]", " ", text)
+        text = re.sub(r"[^a-z0-9\s]", " ", text)
         return " ".join(text.split())

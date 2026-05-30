@@ -17,6 +17,8 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import (
     FeedbackResponse,
+    MessagesListResponse,
+    MessageResponse,
     SessionDetailResponse,
     SessionMessageResponse,
     StartSessionResponse,
@@ -49,6 +51,18 @@ def process_message(payload: SessionMessageRequest) -> SessionMessageResponse:
 def get_session(session_id: UUID) -> SessionDetailResponse:
     try:
         return session_use_cases.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/session/{session_id}/messages", response_model=MessagesListResponse)
+def get_session_messages(session_id: UUID) -> MessagesListResponse:
+    try:
+        raw_messages = session_use_cases.get_session_messages(session_id)
+        return MessagesListResponse(
+            session_id=session_id,
+            messages=[MessageResponse(**m) for m in raw_messages],
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
